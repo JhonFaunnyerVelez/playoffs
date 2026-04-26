@@ -1,6 +1,6 @@
 import { Trophy, Play, Shield, Save } from 'lucide-react'
 
-export default function Bracket({ bracketState, onSimulateMatch, onSaveTournament }) {
+export default function Bracket({ bracketState, onSimulateMatch, onResetTournament }) {
   
   const renderMatch = (match, round, index) => {
     const isReady = match.team1 && match.team2
@@ -92,8 +92,25 @@ export default function Bracket({ bracketState, onSimulateMatch, onSaveTournamen
     )
   }
 
+  const handleResetTournament = () => {
+    if (confirm("¿Deseas iniciar un nuevo torneo? Los datos actuales se limpiarán.")) {
+      onResetTournament()
+    }
+  }
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center animate-fade-in py-8">
+      
+      <div className="mb-8 text-center">
+        <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
+          Fase de <span className="text-blue-600">Playoffs</span>
+        </h2>
+        <div className="flex items-center gap-3 mt-2 justify-center">
+          <div className="h-px w-8 bg-slate-300"></div>
+          <p className="text-xs font-black text-slate-400 uppercase tracking-[0.4em]">Enfrentamientos Directos</p>
+          <div className="h-px w-8 bg-slate-300"></div>
+        </div>
+      </div>
       
       {bracketState.champion && (
         <div className="mb-10 flex flex-col items-center">
@@ -106,14 +123,17 @@ export default function Bracket({ bracketState, onSimulateMatch, onSaveTournamen
               {bracketState.champion.name}
             </h2>
             <p className="text-lg text-yellow-600 mt-1 font-black uppercase tracking-widest relative z-10">¡Campeón!</p>
+            <div className="mt-4 bg-emerald-100 text-emerald-700 text-[10px] font-black py-1 px-3 rounded-full uppercase tracking-widest animate-pulse">
+              🏆 Torneo guardado en el historial
+            </div>
           </div>
           
           <button 
-            onClick={onSaveTournament}
-            className="mt-6 flex items-center gap-2 bg-slate-900 text-white px-6 py-3 rounded-full font-bold shadow-xl hover:bg-indigo-600 hover:-translate-y-1 transition-all"
+            onClick={handleResetTournament}
+            className="mt-6 flex items-center gap-2 bg-slate-900 text-white px-8 py-3 rounded-full font-bold shadow-xl hover:bg-red-600 hover:-translate-y-1 transition-all"
           >
-            <Save className="w-5 h-5" />
-            Guardar Torneo en Historial
+            <Play className="w-5 h-5 rotate-180" />
+            Iniciar Nuevo Torneo
           </button>
         </div>
       )}

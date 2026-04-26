@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Timer, Goal, AlertTriangle, ShieldAlert, CheckCircle2, XCircle, Hand, Target, Shield, ArrowRight } from 'lucide-react'
+import { Timer, Goal, AlertTriangle, ShieldAlert, CheckCircle2, XCircle, Hand, Target, Shield, ArrowRight, Monitor, Play } from 'lucide-react'
+import penalImg from '../assets/penal.png'
+import varImg from '../assets/VAR.png'
+import callingVarImg from '../assets/llamandoVar.png'
 
 export default function MatchSimulator({ match, onComplete }) {
   const { team1, team2, round, index, leg, matchData } = match
@@ -14,6 +17,11 @@ export default function MatchSimulator({ match, onComplete }) {
   const [events, setEvents] = useState([])
   const [winner, setWinner] = useState(null)
   const [giantGoal, setGiantGoal] = useState(null)
+  const [giantPenalty, setGiantPenalty] = useState(null)
+  const [giantMiss, setGiantMiss] = useState(null)
+  const [giantVar, setGiantVar] = useState(null) // { type: 'calling' | 'confirmed' | 'annulled', team, player }
+  const [activeVar, setActiveVar] = useState(null) // { team, player, count }
+  const [giantStoppage, setGiantStoppage] = useState(null) // count
 
   const [penHistory1, setPenHistory1] = useState([])
   const [penHistory2, setPenHistory2] = useState([])
@@ -26,17 +34,46 @@ export default function MatchSimulator({ match, onComplete }) {
   // Estado único para cualquier penal (regular o tanda)
   // { type: 'regular' | 'shootout', team, player, count }
   const [activePenalty, setActivePenalty] = useState(null)
+  const [stoppageTime] = useState(() => Math.floor(Math.random() * 6) + 3) // 3, 4, 5, 6, 7, 8
 
   const [yellowCards, setYellowCards] = useState({ [team1.id]: [], [team2.id]: [] })
   const [redCards, setRedCards] = useState({ [team1.id]: [], [team2.id]: [] })
 
   const localTeam = leg === 'vuelta' ? team2 : team1
 
+  const referees = ['Nicolás Gallo', 'Alexander Guzmán', 'Wilmar Roldán', 'Carlos Ortega', 'Luis Matorel']
+  const [referee] = useState(() => {
+    if (round === 'final') {
+      return Math.random() < 0.5 ? 'Wilmar Roldán' : 'Luis Matorel'
+    }
+    return referees[Math.floor(Math.random() * referees.length)]
+  })
+
+  const getRoundName = () => {
+    if (round === 'qf') return 'Cuartos de Final'
+    if (round === 'sf') return 'Semifinal'
+    return 'Gran Final'
+  }
+
+  // Evento de inicio del partido
+  useEffect(() => {
+    if (minute === 0 && events.length === 0) {
+      setEvents([{ 
+        minute: 0, 
+        message: '🏁 ¡PITAZO INICIAL! Comienza el partido', 
+        icon: <Play className="w-5 h-5 text-indigo-500 fill-current" />, 
+        color: 'text-indigo-600 font-black uppercase tracking-widest' 
+      }])
+    }
+  }, [])
+
   // Bucle de partido regular
   useEffect(() => {
-    if (matchPhase !== 'regular' || giantGoal || activePenalty) return
+    if (matchPhase !== 'regular' || giantGoal || activePenalty || activeVar || giantVar || giantMiss || giantStoppage || giantPenalty) return
 
-    if (minute >= 90) {
+    const maxTime = 90 + stoppageTime
+
+    if (minute >= maxTime) {
       if (leg === 'ida') {
         finishMatch(null)
       } else {
@@ -59,12 +96,28 @@ export default function MatchSimulator({ match, onComplete }) {
     }
 
     const timer = setTimeout(() => {
+      if (minute === 89) {
+        // Al llegar a 90 (en el siguiente tick), mostramos la adición
+        setGiantStoppage(stoppageTime)
+        setTimeout(() => setGiantStoppage(null), 3000)
+        
+        setEvents(prev => [{ 
+          minute: '90', 
+          message: `⏱️ +${stoppageTime} MINUTOS DE ADICIÓN`, 
+          icon: <Timer className="w-5 h-5 text-amber-500" />, 
+          color: 'text-amber-600 font-black' 
+        }, ...prev])
+      }
+
       setMinute(prev => prev + 1)
-      generateRandomEvent(minute + 1)
-    }, 666)
+      // Solo generamos eventos si NO estamos en el último segundo del partido
+      if (minute + 1 < maxTime) {
+        generateRandomEvent(minute + 1)
+      }
+    }, 400)
 
     return () => clearTimeout(timer)
-  }, [minute, matchPhase, giantGoal, activePenalty])
+  }, [minute, matchPhase, giantGoal, activePenalty, activeVar, giantVar, giantMiss, stoppageTime, giantStoppage, giantPenalty])
 
   // Motor de resolución de la cuenta regresiva de penales
   useEffect(() => {
@@ -80,7 +133,20 @@ export default function MatchSimulator({ match, onComplete }) {
       const { type, team, player } = activePenalty
       setActivePenalty(null) // Quitar el estado del penal
       
-      const isGoal = Math.random() < 0.70 // 70% gol, 30% fallo
+      let goalProb = 0.70 // Default para penales en tiempo regular
+      
+      if (type === 'shootout') {
+        const totalKicks = penHistory1.length + penHistory2.length
+        const isSuddenDeath = penHistory1.length >= 5 && penHistory2.length >= 5
+        
+        if (isSuddenDeath) {
+          goalProb = 0.30 // Muerte súbita: 30% anota, 70% lo bota
+        } else {
+          goalProb = 0.50 // Tanda regular (primeros 5): 50% / 50%
+        }
+      }
+
+      const isGoal = Math.random() < goalProb 
       
       if (type === 'regular') {
          if (isGoal) {
@@ -98,6 +164,10 @@ export default function MatchSimulator({ match, onComplete }) {
            const message = `❌ ¡PENAL FALLADO! ${player} (${team.name}) erró desde los 12 pasos`
            const icon = <XCircle className="w-5 h-5 text-red-500" />
            const color = 'text-red-500 font-bold'
+           
+           setGiantMiss({ team, player })
+           setTimeout(() => setGiantMiss(null), 2500)
+           
            setEvents(prev => [{ minute, message, icon, color, teamId: team.id }, ...prev])
          }
       } else {
@@ -116,17 +186,72 @@ export default function MatchSimulator({ match, onComplete }) {
             player: isGoal ? player : null
          }, ...prev])
 
+         if (!isGoal) {
+            setGiantMiss({ team, player })
+            setTimeout(() => setGiantMiss(null), 2500)
+         }
+
          setIsTeam1Turn(!isTeam1TurnLocal)
       }
     }
   }, [activePenalty, minute])
 
+  // Motor de resolución de VAR
+  useEffect(() => {
+    if (!activeVar) return
+
+    if (activeVar.count > 0) {
+      const timer = setTimeout(() => {
+        setActiveVar(prev => ({ ...prev, count: prev.count - 1 }))
+      }, 1000)
+      return () => clearTimeout(timer)
+    } else {
+      const { team, player } = activeVar
+      setActiveVar(null)
+      
+      const isConfirmed = Math.random() < 0.5
+      
+      if (isConfirmed) {
+        setGiantVar({ type: 'confirmed', team, player })
+        
+        if (team.id === team1.id) setScore1(s => s + 1)
+        else setScore2(s => s + 1)
+        
+        setTimeout(() => {
+          setGiantVar(null)
+          
+          setEvents(prev => [{ 
+            minute, 
+            message: `✅ ¡VAR CONFIRMA EL GOL! de ${player} (${team.name})`, 
+            icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" />, 
+            color: 'text-emerald-600 font-black',
+            teamId: team.id,
+            type: 'goal',
+            player
+          }, ...prev])
+        }, 4000)
+      } else {
+        setGiantVar({ type: 'annulled', team, player })
+        setTimeout(() => {
+          setGiantVar(null)
+          setEvents(prev => [{ 
+            minute, 
+            message: `❌ ¡GOL ANULADO POR EL VAR! (${team.name})`, 
+            icon: <XCircle className="w-5 h-5 text-red-500" />, 
+            color: 'text-red-600 font-black',
+            teamId: team.id
+          }, ...prev])
+        }, 3000)
+      }
+    }
+  }, [activeVar, minute])
+
   // Bucle de tanda de penales
   useEffect(() => {
-    if (matchPhase !== 'penalties' || activePenalty !== null || giantGoal) return
+    if (matchPhase !== 'penalties' || activePenalty !== null || giantGoal || giantMiss) return
     const timer = setTimeout(() => triggerShootoutPenalty(), 1500)
     return () => clearTimeout(timer)
-  }, [penHistory1, penHistory2, isTeam1Turn, matchPhase, activePenalty, giantGoal])
+  }, [penHistory1, penHistory2, isTeam1Turn, matchPhase, activePenalty, giantGoal, giantMiss])
 
   const getRandomPlayer = (team, excludeRole = null) => {
     let players = team.players || []
@@ -170,16 +295,27 @@ export default function MatchSimulator({ match, onComplete }) {
     // Emoción de final
     if (currentMinute >= 85) {
       if (global1 === global2) {
-        eventProbability = 0.05 
+        eventProbability = 0.25 // More likely to break the tie at the end
       } else {
         const diff = Math.abs(global1 - global2)
         if (diff >= 3) {
            eventProbability = 0.4
            overrideScoringTeam = global1 < global2 ? team1 : team2
-        } else if (diff === 1) {
-           eventProbability = 0.3
+        } else if (diff <= 2) {
+           eventProbability = 0.35 // High intensity if it's close
         }
       }
+    }
+
+    // Boost goals in Vuelta
+    if (leg === 'vuelta') {
+      eventProbability *= 1.4 // 40% more events/goals in return leg
+    }
+
+    // Si hay rojas, el partido se abre más (más ataques)
+    const totalReds = (redCards[team1.id]?.length || 0) + (redCards[team2.id]?.length || 0)
+    if (totalReds > 0) {
+      eventProbability += (totalReds * 0.05) // +5% por cada roja global
     }
 
     if (Math.random() > eventProbability) return 
@@ -198,7 +334,15 @@ export default function MatchSimulator({ match, onComplete }) {
     const reds2 = redCards[team2.id]?.length || 0
     team1Prob -= (reds1 * 0.20)
     team1Prob += (reds2 * 0.20)
-    team1Prob = Math.max(0.1, Math.min(0.9, team1Prob)) 
+
+    // EMPUJE AL EMPATE: Si falta poco y la diferencia es de solo 1 gol global
+    if (currentMinute >= 80 && diff === 1) {
+      const losingTeamIs1 = global1 < global2
+      if (losingTeamIs1) team1Prob += 0.35 // Fuerte empuje para el empate
+      else team1Prob -= 0.35
+    }
+
+    team1Prob = Math.max(0.05, Math.min(0.95, team1Prob)) 
 
     let isTeam1 = Math.random() < team1Prob
     if (overrideScoringTeam) {
@@ -211,25 +355,58 @@ export default function MatchSimulator({ match, onComplete }) {
     const eventTypeRand = overrideScoringTeam ? 0.1 : Math.random() 
     
     let message, icon, color
+
+    // Ajuste de probabilidades de tipo de evento después del minuto 80
+    // Aumentamos la probabilidad de PENAL (normalmente es 3%, lo subimos a ~12%)
+    let penaltyThreshold = 0.25
+    if (currentMinute >= 80) {
+      penaltyThreshold = 0.32 // 10% penalty chance now (0.22 + 0.10)
+    }
     
     if (eventTypeRand < 0.22) {
       const player = getRandomPlayer(team, 'gk')
-      message = `⚽ ¡GOL de ${team.name}! Anota ${player}`
-      icon = team.logoUrl ? <img src={team.logoUrl} className="w-5 h-5 rounded-sm object-cover" /> : <Goal className="w-5 h-5 text-emerald-500" />
-      color = 'text-emerald-600 font-black text-lg'
+      const isVarCheck = Math.random() < 0.30 // 30% VAR chance now
       
+      // Siempre mostramos el grito de GOL primero para saber qué se celebra
       setGiantGoal({ team, player })
-      setTimeout(() => setGiantGoal(null), 2500)
-
-      if (isTeam1) setScore1(s => s + 1)
-      else setScore2(s => s + 1)
-      setEvents(prev => [{ minute: currentMinute, message, icon, color, teamId: team.id, type: 'goal', player }, ...prev])
+      
+      setTimeout(() => {
+        setGiantGoal(null)
+        
+        if (isVarCheck) {
+          // Interrupción por VAR
+          setGiantVar({ type: 'calling', team, player })
+          setTimeout(() => {
+            setGiantVar(null)
+            setActiveVar({ team, player, count: 15 })
+          }, 3000)
+        } else {
+          // Gol normal sin VAR
+          if (isTeam1) setScore1(s => s + 1)
+          else setScore2(s => s + 1)
+          
+          setEvents(prev => [{ 
+            minute: currentMinute, 
+            message: `⚽ ¡GOL de ${team.name}! Anota ${player}`, 
+            icon: team.logoUrl ? <img src={team.logoUrl} className="w-5 h-5 rounded-sm object-cover" /> : <Goal className="w-5 h-5 text-emerald-500" />, 
+            color: 'text-emerald-600 font-black text-lg', 
+            teamId: team.id, 
+            type: 'goal', 
+            player 
+          }, ...prev])
+        }
+      }, 2500)
+      
+      return // Pausamos el bucle mientras duran las animaciones
     
-    } else if (eventTypeRand < 0.25) {
-      // PENAL en tiempo regular (Probabilidad baja del 3%)
+    } else if (eventTypeRand < penaltyThreshold) {
+      // PENAL en tiempo regular
       const player = getRandomPlayer(team, 'gk')
-      setActivePenalty({ type: 'regular', team, player, count: 3 })
-      // No seguimos procesando, el partido entra en pausa.
+      setGiantPenalty({ team, player })
+      setTimeout(() => {
+        setGiantPenalty(null)
+        setActivePenalty({ type: 'regular', team, player, count: 10 })
+      }, 3000)
       return
 
     } else if (eventTypeRand < 0.50) {
@@ -309,7 +486,7 @@ export default function MatchSimulator({ match, onComplete }) {
     if (isTeam1Turn) setKickers1(prev => [...prev, player])
     else setKickers2(prev => [...prev, player])
 
-    setActivePenalty({ type: 'shootout', team: currentTeam, player, count: 3 })
+    setActivePenalty({ type: 'shootout', team: currentTeam, player, count: 10 })
   }
 
   const finishMatch = (matchWinner, wasPenalties = false) => {
@@ -443,89 +620,264 @@ export default function MatchSimulator({ match, onComplete }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center animate-fade-in p-4 max-w-6xl mx-auto w-full relative">
       
+      {/* Título del Partido */}
+      <div className="mb-8 text-center relative z-10">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em] mb-1">Competencia Oficial</p>
+        <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic flex items-center justify-center gap-3">
+          {round === 'qf' ? 'Cuartos de Final' : round === 'sf' ? 'Semifinales' : 'Gran Final'}
+          <span className="h-4 w-px bg-slate-300"></span>
+          <span className="text-blue-600">{leg === 'ida' ? 'Ida' : 'Vuelta'}</span>
+        </h2>
+      </div>
+
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] pointer-events-none opacity-[0.03] bg-[radial-gradient(circle_at_center,_#000_0%,_transparent_70%)] mix-blend-multiply rounded-full"></div>
 
-      {giantGoal && (
-        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-slate-900/40 backdrop-blur-md">
-          <h1 
+      {giantMiss && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-red-900/60 backdrop-blur-md">
+           <h1 
             className="text-8xl font-black italic tracking-tighter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] animate-giantGoal uppercase leading-none text-white"
-            style={{ WebkitTextStroke: `2px #000` }}
+            style={{ WebkitTextStroke: `3px #000` }}
           >
-            ¡GOOOL!
+            ¡LO BOTÓOOO!
           </h1>
-          <div className="animate-pop-out mt-4 bg-white px-6 py-2 rounded-2xl shadow-2xl border-2 border-white transform scale-125 flex flex-col items-center">
-             {giantGoal.team.logoUrl && <img src={giantGoal.team.logoUrl} className="w-12 h-12 mb-2" />}
-            <p className="text-lg font-black text-slate-900 uppercase tracking-widest">{giantGoal.team.name}</p>
-            <p className="text-sm font-bold text-indigo-600 uppercase text-center mt-1">{giantGoal.player}</p>
+          <div className="animate-pop-out mt-8 bg-white px-10 py-4 rounded-[2rem] shadow-2xl border-4 border-red-600 transform scale-110 flex flex-col items-center">
+            <p className="text-sm font-black text-red-600 uppercase tracking-[0.3em] mb-1">Erró el penal</p>
+            <p className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{giantMiss.player}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">{giantMiss.team.name}</p>
           </div>
         </div>
       )}
 
-      <div className="glass-panel w-full rounded-[2.5rem] p-8 mb-8 relative border border-white/60 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.1)] bg-gradient-to-br from-white to-slate-50">
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10">
-          <div className="flex items-center gap-2 bg-white px-4 py-1.5 rounded-xl border border-slate-100 shadow-sm">
-            <Timer className={`w-4 h-4 ${(matchPhase === 'regular' && !giantGoal && !activePenalty) ? 'text-indigo-600 animate-spin-slow' : 'text-slate-400'}`} />
-            <span className="font-mono font-black text-xl text-slate-900 tracking-tighter">
-              {matchPhase === 'regular' ? `${minute}'` : matchPhase === 'penalties' ? 'P' : 'F'}
-            </span>
-          </div>
-          <div className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1 bg-slate-100 px-2 py-0.5 rounded-full">
-            {leg === 'ida' ? 'Ida' : 'Vuelta'}
+      {giantStoppage && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-slate-900/50 backdrop-blur-md">
+          <div className="flex flex-col items-center animate-giantGoal">
+            <div className="bg-amber-400 text-slate-900 px-8 py-2 rounded-t-2xl font-black uppercase tracking-[0.4em] text-xs shadow-xl">
+              Tiempo Extra
+            </div>
+            <div className="bg-white px-12 py-8 rounded-b-[2.5rem] rounded-tr-[2.5rem] shadow-2xl flex flex-col items-center border-b-8 border-amber-500">
+               <h1 className="text-9xl font-black italic tracking-tighter text-slate-900 leading-none">
+                 +{giantStoppage}
+               </h1>
+               <p className="text-xl font-black uppercase tracking-widest text-amber-600 mt-2 italic">Minutos de Adición</p>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="flex items-start justify-between gap-4 mt-8 w-full relative z-0">
-          {/* Local Team */}
-          {renderTeamBlock(leg === 'vuelta' ? team2 : team1, leg === 'vuelta' ? score2 : score1, leg === 'vuelta' ? penHistory2 : penHistory1, leg === 'vuelta' ? !isTeam1Turn : isTeam1Turn)}
+      {giantGoal && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-slate-900/40 backdrop-blur-md">
+          <div className="flex items-center gap-6 animate-giantGoal">
+            <h1 
+              className="text-9xl font-black italic tracking-tighter drop-shadow-[0_15px_15px_rgba(0,0,0,0.5)] uppercase leading-none text-white"
+              style={{ WebkitTextStroke: `3px #000` }}
+            >
+              ¡GOOOOOL!
+            </h1>
+            <div className="w-28 h-28 rounded-full bg-white p-2 shadow-2xl border-4 border-white animate-pop-out overflow-hidden">
+               {giantGoal.team.logoUrl ? (
+                 <img src={giantGoal.team.logoUrl} alt="" className="w-full h-full object-cover" />
+               ) : (
+                 <Shield className="w-full h-full text-slate-200" />
+               )}
+            </div>
+          </div>
           
-          {/* Score Center */}
-          <div className="flex flex-col items-center gap-4 px-6 mt-16 flex-shrink-0">
-            <div className="flex items-center gap-6">
-              <span className="text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score2 : score1}</span>
-              <span className="text-4xl text-slate-200 font-black mb-4">-</span>
-              <span className="text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score1 : score2}</span>
+          <div className="animate-pop-out mt-12 bg-white px-10 py-4 rounded-[2rem] shadow-2xl border-4 border-indigo-600 transform scale-110 flex flex-col items-center">
+            <p className="text-sm font-black text-indigo-600 uppercase tracking-[0.3em] mb-1">Anotador</p>
+            <p className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{giantGoal.player}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{giantGoal.team.name}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {giantPenalty && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-red-900/40 backdrop-blur-md">
+          <div className="flex flex-col items-center animate-giantGoal">
+            <h1 
+              className="text-9xl font-black italic tracking-tighter drop-shadow-[0_15px_15px_rgba(0,0,0,0.5)] uppercase leading-none text-white mb-8"
+              style={{ WebkitTextStroke: `3px #000` }}
+            >
+              ¡PENAL!
+            </h1>
+            <div className="bg-white px-10 py-4 rounded-[2rem] shadow-2xl border-4 border-red-600 transform scale-110 flex flex-col items-center">
+              <p className="text-sm font-black text-red-600 uppercase tracking-[0.3em] mb-1">Falta para</p>
+              <p className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{giantPenalty.team.name}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {giantVar && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-slate-900/60 backdrop-blur-md">
+          <div className="flex flex-col items-center animate-giantGoal">
+            <div className="flex items-center gap-6 mb-8">
+              <h1 
+                className={`text-8xl font-black italic tracking-tighter drop-shadow-[0_15px_15px_rgba(0,0,0,0.5)] uppercase leading-none text-white`}
+                style={{ WebkitTextStroke: `3px #000` }}
+              >
+                {giantVar.type === 'calling' ? 'LLAMADO VAR' : giantVar.type === 'confirmed' ? 'GOL CONFIRMADO ¡GOOOOOL!' : 'GOL ANULADO'}
+              </h1>
+              {giantVar.type === 'calling' && (
+                <div className="w-64 h-64 bg-white p-2 rounded-3xl shadow-2xl animate-pop-out overflow-hidden border-4 border-blue-600">
+                   <img src={callingVarImg} alt="VAR" className="w-full h-full object-cover" />
+                </div>
+              )}
             </div>
             
-            {leg === 'vuelta' && (
-              <div className="flex flex-col items-center gap-2 mt-2">
-                <div className="bg-slate-900 text-white px-6 py-2 rounded-xl font-black shadow-xl border border-slate-700 text-lg tracking-tighter">
-                  GLOBAL: <span className="text-yellow-400">{leg === 'vuelta' ? global2 : global1}</span> - <span className="text-yellow-400">{leg === 'vuelta' ? global1 : global2}</span>
+            <div className={`bg-white px-10 py-4 rounded-[2rem] shadow-2xl border-4 transform scale-110 flex flex-col items-center
+              ${giantVar.type === 'annulled' ? 'border-red-600' : 'border-blue-600'}
+            `}>
+              <p className={`text-sm font-black uppercase tracking-[0.3em] mb-1 ${giantVar.type === 'annulled' ? 'text-red-600' : 'text-blue-600'}`}>
+                {giantVar.type === 'annulled' ? 'No hay Gol para' : 'Decisión para'}
+              </p>
+              <p className="text-3xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{giantVar.team.name}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col xl:flex-row gap-6 w-full max-w-[1400px] items-stretch animate-fade-in">
+        <div className="flex-1 glass-panel rounded-[2.5rem] p-8 relative border border-white/60 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.1)] bg-gradient-to-br from-white to-slate-50 flex flex-col justify-center min-h-[500px]">
+          <div className="absolute top-6 left-8 flex flex-col gap-0.5">
+             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
+                Árbitro Central
+             </div>
+             <div className="text-sm font-black text-slate-800 italic uppercase tracking-tighter">{referee}</div>
+          </div>
+
+          <div className="absolute top-6 right-8 flex flex-col items-end gap-0.5">
+             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{getRoundName()}</div>
+             <div className="text-xs font-black text-blue-600 italic uppercase tracking-tighter">{leg.toUpperCase()}</div>
+          </div>
+
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10">
+            <div className="flex items-center gap-2 bg-white px-4 py-1.5 rounded-xl border border-slate-100 shadow-sm">
+              <Timer className={`w-4 h-4 ${(matchPhase === 'regular' && !giantGoal && !activePenalty) ? 'text-indigo-600 animate-spin-slow' : 'text-slate-400'}`} />
+              <span className="font-mono font-black text-xl text-slate-900 tracking-tighter">
+                {matchPhase === 'regular' ? (minute > 90 ? `90+${minute - 90}'` : `${minute}'`) : matchPhase === 'penalties' ? 'P' : 'F'}
+              </span>
+            </div>
+            <div className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1 bg-slate-100 px-2 py-0.5 rounded-full">
+              {leg === 'ida' ? 'Ida' : 'Vuelta'}
+            </div>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 mt-8 w-full relative z-0">
+            {/* Local Team */}
+            {renderTeamBlock(leg === 'vuelta' ? team2 : team1, leg === 'vuelta' ? score2 : score1, leg === 'vuelta' ? penHistory2 : penHistory1, leg === 'vuelta' ? !isTeam1Turn : isTeam1Turn)}
+            
+            {/* Score Center */}
+            <div className="flex flex-col items-center gap-4 px-6 mt-16 w-[320px] flex-shrink-0 relative">
+              <div className="flex items-center gap-6">
+                <span className="text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score2 : score1}</span>
+                <span className="text-4xl text-slate-200 font-black mb-4">-</span>
+                <span className="text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score1 : score2}</span>
+              </div>
+              
+              {leg === 'vuelta' && (
+                <div className="flex flex-col items-center gap-2 mt-2">
+                  <div className="bg-slate-900 text-white px-6 py-2 rounded-xl font-black shadow-xl border border-slate-700 text-lg tracking-tighter">
+                    GLOBAL: <span className="text-yellow-400">{leg === 'vuelta' ? global2 : global1}</span> - <span className="text-yellow-400">{leg === 'vuelta' ? global1 : global2}</span>
+                  </div>
+                  {matchPhase === 'penalties' && (
+                    <div className="bg-white text-slate-900 px-6 py-1 rounded-full font-black shadow-sm border border-slate-200 text-sm tracking-tighter flex items-center gap-2">
+                      PENALES: <span className="text-blue-600">{leg === 'vuelta' ? penHistory2.filter(h=>h==='goal').length : penHistory1.filter(h=>h==='goal').length}</span> - <span className="text-red-600">{leg === 'vuelta' ? penHistory1.filter(h=>h==='goal').length : penHistory2.filter(h=>h==='goal').length}</span>
+                    </div>
+                  )}
                 </div>
-                {matchPhase === 'penalties' && (
-                  <div className="bg-white text-slate-900 px-6 py-1 rounded-full font-black shadow-sm border border-slate-200 text-sm tracking-tighter flex items-center gap-2">
-                    PENALES: <span className="text-blue-600">{leg === 'vuelta' ? penHistory2.filter(h=>h==='goal').length : penHistory1.filter(h=>h==='goal').length}</span> - <span className="text-red-600">{leg === 'vuelta' ? penHistory1.filter(h=>h==='goal').length : penHistory2.filter(h=>h==='goal').length}</span>
+              )}
+              
+              <div className="min-h-[220px] w-full flex flex-col items-center justify-start">
+                {activePenalty && (
+                  <div className="mt-4 animate-bounce-in flex flex-col items-center">
+                    <img src={penalImg} alt="Penal" className="w-32 h-auto rounded-xl shadow-lg border-2 border-white" />
+                    <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mt-2 animate-pulse">Definiendo el destino...</p>
+                    <div className="mt-1 text-2xl font-black text-slate-900">{activePenalty.count}</div>
+                  </div>
+                )}
+
+                {activeVar && (
+                  <div className="mt-6 animate-bounce-in flex flex-col items-center">
+                    <img src={varImg} alt="VAR" className="w-56 h-auto rounded-3xl shadow-2xl border-4 border-white" />
+                    <p className="text-xs font-black text-blue-600 uppercase tracking-[0.2em] mt-4 animate-pulse text-center leading-relaxed">REVISIÓN GOL<br/>{activeVar.team.name}</p>
+                    <div className="mt-2 text-3xl font-black text-slate-900 bg-slate-100 px-6 py-1 rounded-full">{activeVar.count}s</div>
                   </div>
                 )}
               </div>
-            )}
+            </div>
+
+            {/* Visitor Team */}
+            {renderTeamBlock(leg === 'vuelta' ? team1 : team2, leg === 'vuelta' ? score1 : score2, leg === 'vuelta' ? penHistory1 : penHistory2, leg === 'vuelta' ? isTeam1Turn : !isTeam1Turn)}
+          </div>
+        </div>
+
+        {/* Events Feed (Right Side) */}
+        <div className="xl:w-[450px] w-full bg-white rounded-[2.5rem] flex flex-col overflow-hidden border border-white shadow-xl relative h-[450px] flex-shrink-0">
+          <div className="bg-slate-50/80 backdrop-blur-md p-4 border-b border-slate-100 flex items-center justify-between px-6">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              <span className="font-black text-[10px] text-slate-400 uppercase tracking-[0.3em]">Transmisión en Vivo</span>
+            </div>
+            <div className="text-[10px] font-black text-slate-300 uppercase tracking-widest italic">Live Feed</div>
           </div>
 
-          {/* Visitor Team */}
-          {renderTeamBlock(leg === 'vuelta' ? team1 : team2, leg === 'vuelta' ? score1 : score2, leg === 'vuelta' ? penHistory1 : penHistory2, leg === 'vuelta' ? isTeam1Turn : !isTeam1Turn)}
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 custom-scrollbar">
+            {events.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full opacity-30">
+                 <div className="w-12 h-1 bg-slate-200 rounded-full mb-4 animate-pulse"></div>
+                 <p className="font-black text-slate-400 uppercase tracking-widest text-[10px]">Esperando inicio...</p>
+              </div>
+            )}
+            {events.map((ev, i) => {
+              const isLatest = i === 0;
+              // Calculamos opacidad progresiva: 1 para i=0, 0.8 para i=1, 0.6 para i=2, etc. Mínimo 0.2
+              const opacity = isLatest ? 1 : Math.max(0.2, 1 - (i * 0.2));
+              const scale = isLatest ? 1.02 : Math.max(0.9, 1 - (i * 0.02));
+              const grayscale = isLatest ? 0 : Math.min(1, i * 0.25);
+              
+              return (
+                <div 
+                  key={i} 
+                  className={`flex items-center gap-4 p-3 rounded-2xl transition-all duration-700 group border
+                    ${isLatest 
+                      ? 'bg-white border-blue-200 shadow-xl shadow-blue-100/50 ring-4 ring-blue-50 z-10 animate-bounce-in' 
+                      : 'bg-slate-50/50 border-slate-100'}`}
+                  style={{ 
+                    opacity: opacity,
+                    transform: `scale(${scale})`,
+                    filter: `grayscale(${grayscale})`
+                  }}
+                >
+                  <div className={`font-mono font-black text-xs w-12 h-8 flex items-center justify-center rounded-xl shadow-sm border transition-colors
+                    ${isLatest 
+                      ? 'text-blue-600 bg-white border-blue-100' 
+                      : 'text-slate-400 bg-slate-50 border-slate-200'}`}>
+                    {ev.minute}'
+                  </div>
+                  <div className={`w-8 flex justify-center transform transition-transform ${isLatest ? 'scale-125 drop-shadow-md' : 'scale-100'}`}>
+                    {ev.icon}
+                  </div>
+                  <div className="flex flex-col flex-1">
+                    <span className={`text-xs font-bold tracking-tight leading-snug ${isLatest ? ev.color : 'text-slate-600'}`}>
+                      {ev.message}
+                    </span>
+                    {ev.player && (
+                      <span className={`text-[9px] font-black uppercase tracking-widest mt-0.5 ${isLatest ? 'text-slate-500' : 'text-slate-400'}`}>
+                        {ev.player}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
         </div>
-      </div>
-
-      {/* Events Feed */}
-      <div className="w-full max-w-4xl bg-white rounded-[2.5rem] h-[250px] flex flex-col overflow-hidden border border-white shadow-xl relative">
-        <div className="bg-slate-50/50 p-4 border-b border-slate-100 font-black text-[10px] text-slate-400 uppercase tracking-[0.3em] text-center">
-          Transmisión en Vivo
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-3 custom-scrollbar">
-          {events.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full opacity-30">
-               <div className="w-12 h-1 bg-slate-200 rounded-full mb-4 animate-pulse"></div>
-               <p className="font-black text-slate-400 uppercase tracking-widest text-sm">Los equipos saltan al campo...</p>
-            </div>
-          )}
-          {events.map((ev, i) => (
-            <div key={i} className="flex items-center gap-4 bg-slate-50/50 p-3 rounded-2xl animate-slide-in border border-slate-100 hover:bg-white hover:shadow-sm transition-all group">
-              <div className="font-mono font-black text-sm text-slate-400 bg-white w-12 h-8 flex items-center justify-center rounded-xl shadow-sm border border-slate-50 group-hover:text-indigo-600 group-hover:border-indigo-100 transition-colors">{ev.minute}'</div>
-              <div className="w-8 flex justify-center transform group-hover:scale-125 transition-transform">{ev.icon}</div>
-              <span className={`flex-1 text-sm tracking-tight ${ev.color}`}>{ev.message}</span>
-            </div>
-          ))}
-        </div>
-        <div className="absolute top-[52px] left-0 right-0 h-8 bg-gradient-to-b from-white to-transparent pointer-events-none"></div>
       </div>
 
       {/* Action Area */}

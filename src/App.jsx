@@ -9,6 +9,7 @@ import { Trophy, History, LogOut } from 'lucide-react'
 import { db, auth } from './firebase'
 import { collection, onSnapshot, query, where, writeBatch, doc, addDoc, updateDoc, increment } from 'firebase/firestore'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
+import colombiaLogo from './assets/colombia.png'
 
 const DEFAULT_PLAYERS = [
   "Portero", "Defensa 1", "Defensa 2", "Defensa 3", "Defensa 4",
@@ -30,10 +31,42 @@ function App() {
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
 
-  const [phase, setPhase] = useState('setup')
+  const [phase, setPhase] = useState(() => localStorage.getItem('fpc_phase') || 'setup')
   const [teams, setTeams] = useState([])
-  const [seededPositions, setSeededPositions] = useState(Array(8).fill(null))
+  const [seededPositions, setSeededPositions] = useState(() => {
+    const saved = localStorage.getItem('fpc_seededPositions')
+    return saved ? JSON.parse(saved) : Array(8).fill(null)
+  })
+
+  const [bracketState, setBracketState] = useState(() => {
+    const saved = localStorage.getItem('fpc_bracketState')
+    return saved ? JSON.parse(saved) : {
+      qf: Array(4).fill({ team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null }),
+      sf: Array(2).fill({ team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null }),
+      final: { team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null },
+      champion: null
+    }
+  })
   
+  const [currentMatch, setCurrentMatch] = useState(() => {
+    const saved = localStorage.getItem('fpc_currentMatch')
+    return saved ? JSON.parse(saved) : null
+  })
+
+  const [tournamentTeams, setTournamentTeams] = useState(() => {
+    const saved = localStorage.getItem('fpc_tournamentTeams')
+    return saved ? JSON.parse(saved) : []
+  })
+
+  // Persistencia de estados
+  useEffect(() => {
+    localStorage.setItem('fpc_phase', phase)
+    localStorage.setItem('fpc_seededPositions', JSON.stringify(seededPositions))
+    localStorage.setItem('fpc_bracketState', JSON.stringify(bracketState))
+    localStorage.setItem('fpc_currentMatch', JSON.stringify(currentMatch))
+    localStorage.setItem('fpc_tournamentTeams', JSON.stringify(tournamentTeams))
+  }, [phase, seededPositions, bracketState, currentMatch, tournamentTeams])
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser)
@@ -48,15 +81,12 @@ function App() {
       return
     }
 
-    // Traemos todos los equipos de la base de datos (compartidos)
     const q = query(collection(db, 'teams'))
     let isFirstLoad = true
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       let teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      
       if (snapshot.empty && isFirstLoad) {
-        // Migración o inicialización: si no tiene equipos, le creamos los por defecto
         const batch = writeBatch(db)
         INITIAL_TEAMS.forEach((team, index) => {
           const docRef = doc(collection(db, 'teams'))
@@ -65,7 +95,6 @@ function App() {
         })
         await batch.commit()
       } else {
-        // Ordenamos localmente para no requerir un índice compuesto en Firestore
         teamsData.sort((a, b) => a.order - b.order)
         setTeams(teamsData)
       }
@@ -81,16 +110,6 @@ function App() {
     vuelta1: null, vuelta2: null, 
     winner: null
   })
-
-  const [bracketState, setBracketState] = useState({
-    qf: Array(4).fill(createMatch(null, null)),
-    sf: Array(2).fill(createMatch(null, null)),
-    final: createMatch(null, null),
-    champion: null
-  })
-  
-  const [currentMatch, setCurrentMatch] = useState(null)
-  const [tournamentTeams, setTournamentTeams] = useState([])
 
   const handleStartDraw = (finalSeeded, selectedTeams) => {
     setSeededPositions(finalSeeded)
@@ -156,41 +175,42 @@ function App() {
     setBracketState(newBracket)
     setCurrentMatch(null)
     setPhase('bracket')
+
+    // AUTO-GUARDAR si hay campeón
+    if (newBracket.champion) {
+      autoSaveTournament(newBracket)
+    }
   }
 
-  const handleSaveTournament = async () => {
+  const autoSaveTournament = async (finalBracket) => {
     try {
-      // Guardar en el historial global compartido
       await addDoc(collection(db, 'tournaments'), {
         date: new Date().toISOString(),
-        champion: bracketState.champion,
-        bracket: bracketState,
+        champion: finalBracket.champion,
+        bracket: finalBracket,
         authorId: user.uid,
         authorName: user.displayName || 'Míster Anónimo',
         authorPhoto: user.photoURL || null
       })
 
-      // Añadir 1 estrella al equipo campeón en el espacio de este usuario
-      if (bracketState.champion && bracketState.champion.id) {
-        const championRef = doc(db, 'teams', bracketState.champion.id)
-        await updateDoc(championRef, {
-          stars: increment(1)
-        })
+      if (finalBracket.champion && finalBracket.champion.id) {
+        const championRef = doc(db, 'teams', finalBracket.champion.id)
+        await updateDoc(championRef, { stars: increment(1) })
       }
-
-      alert("¡Torneo guardado! Tu equipo campeón ha obtenido 1 Estrella ⭐")
-      
-      setBracketState({
-        qf: Array(4).fill(createMatch(null, null)),
-        sf: Array(2).fill(createMatch(null, null)),
-        final: createMatch(null, null),
-        champion: null
-      })
-      setPhase('setup')
+      console.log("Torneo guardado automáticamente")
     } catch (err) {
-      console.error("Error saving tournament", err)
-      alert("Hubo un error guardando el torneo.")
+      console.error("Error auto-saving tournament", err)
     }
+  }
+
+  const handleResetTournament = () => {
+    setBracketState({
+      qf: Array(4).fill({ team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null }),
+      sf: Array(2).fill({ team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null }),
+      final: { team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null },
+      champion: null
+    })
+    setPhase('setup')
   }
 
   const handleLogout = () => {
@@ -217,20 +237,20 @@ function App() {
       <header className="p-4 border-b border-white/20 bg-white/70 backdrop-blur-xl sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-gradient-to-r from-yellow-500 to-blue-600 rounded-lg shadow-md shadow-blue-100">
-              <Trophy className="w-5 h-5 text-white" />
+            <div className="w-8 h-8 bg-white rounded-lg shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden">
+              <img src={colombiaLogo} alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-xl font-black uppercase tracking-tighter text-slate-900">
+            <h1 className="text-xl font-black uppercase tracking-tighter italic text-slate-900">
               PLAYOFFS <span className="text-red-600">FPC</span>
             </h1>
           </div>
-          <div className="flex gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400 items-center">
+          <div className="flex gap-6 text-[11px] font-black uppercase tracking-tighter italic text-slate-400 items-center">
             <button onClick={() => setPhase('setup')} className={`hover:text-blue-500 transition-colors ${phase === 'setup' ? 'text-blue-600' : ''}`}>1. Config</button>
             <button onClick={() => { if(phase !== 'setup') setPhase('draw') }} className={`hover:text-blue-500 transition-colors ${phase === 'draw' ? 'text-blue-600' : ''}`}>2. Sorteo</button>
             <button onClick={() => { if(bracketState.qf[0].team1) setPhase('bracket') }} className={`hover:text-blue-500 transition-colors ${phase === 'bracket' || phase === 'match' ? 'text-blue-600' : ''}`}>3. Torneo</button>
-            <div className="w-px h-4 bg-slate-200 mx-2"></div>
+            <div className="w-px h-4 bg-slate-200 mx-1"></div>
             <button onClick={() => setPhase('history')} className={`flex items-center gap-1 hover:text-indigo-500 transition-colors ${phase === 'history' ? 'text-indigo-600' : ''}`}>
-              <History className="w-3 h-3" /> Historial
+              Historial
             </button>
             
             <div className="flex items-center gap-2 ml-4 pl-4 border-l border-slate-200">
@@ -269,7 +289,7 @@ function App() {
           <Bracket 
             bracketState={bracketState} 
             onSimulateMatch={handleSimulateMatch} 
-            onSaveTournament={handleSaveTournament}
+            onResetTournament={handleResetTournament}
           />
         )}
 

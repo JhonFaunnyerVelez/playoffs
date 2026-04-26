@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { auth, googleProvider } from '../firebase'
 import { signInWithPopup } from 'firebase/auth'
 import { Trophy, LogIn } from 'lucide-react'
+import colombiaLogo from '../assets/colombia.png'
 
 export default function Login() {
   const [loading, setLoading] = useState(false)
@@ -26,11 +27,11 @@ export default function Login() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-tr from-blue-600/20 to-red-600/20 rounded-full blur-[100px] pointer-events-none"></div>
 
       <div className="bg-white/10 backdrop-blur-xl border border-white/20 p-10 rounded-[3rem] shadow-2xl max-w-md w-full relative z-10 animate-fade-in text-center flex flex-col items-center">
-        <div className="w-24 h-24 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-3xl flex items-center justify-center shadow-lg shadow-yellow-500/30 mb-8 transform -rotate-3">
-          <Trophy className="w-12 h-12 text-white" />
+        <div className="w-28 h-28 bg-white p-2 rounded-[2rem] flex items-center justify-center shadow-2xl mb-8 transform -rotate-3 overflow-hidden border-4 border-slate-200">
+          <img src={colombiaLogo} alt="Logo FPC" className="w-full h-full object-contain" />
         </div>
         
-        <h1 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">
+        <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic mb-2">
           Playoffs <span className="text-red-500">FPC</span>
         </h1>
         <p className="text-slate-300 font-medium mb-10">Inicia sesión para crear tu propia liga y guardar tu historial.</p>

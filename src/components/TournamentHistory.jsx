@@ -43,7 +43,7 @@ export default function TournamentHistory({ user }) {
           <ArrowLeft className="w-4 h-4" /> Volver al historial
         </button>
         <div className="bg-white/50 backdrop-blur-md p-4 rounded-2xl mb-4 border border-slate-200 text-center">
-          <h2 className="text-xl font-black text-slate-800">Torneo del {new Date(selectedTournament.date).toLocaleDateString()}</h2>
+          <h2 className="text-xl font-black text-slate-800 uppercase italic tracking-tighter">Torneo del {new Date(selectedTournament.date).toLocaleDateString()}</h2>
         </div>
         {/* Render Bracket in read-only mode (matches are complete so no buttons will appear) */}
         <Bracket bracketState={selectedTournament.bracket} />
@@ -53,7 +53,7 @@ export default function TournamentHistory({ user }) {
 
   return (
     <div className="flex-1 flex flex-col items-center animate-fade-in p-8 w-full max-w-4xl mx-auto">
-      <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 mb-8 flex items-center gap-3">
+      <h2 className="text-3xl font-black uppercase tracking-tighter italic text-slate-900 mb-8 flex items-center gap-3">
         <Trophy className="w-8 h-8 text-yellow-500" />
         Salón de la Fama
       </h2>

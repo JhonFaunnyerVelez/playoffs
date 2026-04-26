@@ -24,7 +24,7 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
     setLocalTeams(teams)
   }, [teams])
 
-  const workspaceTeams = localTeams.filter(t => workspaceIds.includes(t.id))
+  const workspaceTeams = workspaceIds.map(id => localTeams.find(t => t.id === id)).filter(Boolean)
   const filteredTeams = localTeams.filter(t => 
     !workspaceIds.includes(t.id) && (
       t.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -82,13 +82,15 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
   }
 
   const handleStartWithAutofill = () => {
+    // We only take the teams from the personal workspace (Mi Grupo)
     const manualSeededTeams = seeded.filter(s => s !== null)
     const selectedForDraw = [...manualSeededTeams]
     const assignedIds = new Set(selectedForDraw.map(t => t.id))
 
+    // Fill remaining spots from workspaceTeams (Mi Grupo)
     let teamIndex = 0
-    while (selectedForDraw.length < 8 && teamIndex < localTeams.length) {
-      const t = localTeams[teamIndex]
+    while (selectedForDraw.length < 8 && teamIndex < workspaceTeams.length) {
+      const t = workspaceTeams[teamIndex]
       if (!assignedIds.has(t.id)) {
         selectedForDraw.push(t)
         assignedIds.add(t.id)
@@ -97,7 +99,7 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
     }
 
     if (selectedForDraw.length < 8) {
-      alert("No tienes suficientes equipos. Necesitas al menos 8 equipos en total.")
+      alert("No tienes suficientes equipos en 'Mi Grupo'. Necesitas al menos 8 equipos para el sorteo.")
       return
     }
 
@@ -161,12 +163,26 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
   }
 
   const moveTeam = async (index, direction) => {
+    const listToMove = setupMode === 'selection' ? filteredTeams : workspaceTeams
     if (direction === 'up' && index === 0) return
-    if (direction === 'down' && index === localTeams.length - 1) return
+    if (direction === 'down' && index === listToMove.length - 1) return
 
+    const teamA = listToMove[index]
     const swapIndex = direction === 'up' ? index - 1 : index + 1
-    const teamA = localTeams[index]
-    const teamB = localTeams[swapIndex]
+    const teamB = listToMove[swapIndex]
+
+    if (setupMode === 'seeding') {
+      // Reorder workspace IDs
+      const newIds = [...workspaceIds]
+      const idA = teamA.id
+      const idB = teamB.id
+      const idxA = newIds.indexOf(idA)
+      const idxB = newIds.indexOf(idB)
+      newIds[idxA] = idB
+      newIds[idxB] = idA
+      setWorkspaceIds(newIds)
+      return
+    }
 
     const refA = doc(db, 'teams', teamA.id)
     const refB = doc(db, 'teams', teamB.id)
@@ -180,14 +196,14 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
 
     // Optimistic local update to prevent jumpiness
     const newLocal = [...localTeams]
-    newLocal[index] = { ...teamA, order: orderB }
-    newLocal[swapIndex] = { ...teamB, order: orderA }
+    const localIdxA = newLocal.findIndex(t => t.id === teamA.id)
+    const localIdxB = newLocal.findIndex(t => t.id === teamB.id)
+    newLocal[localIdxA] = { ...teamA, order: orderB }
+    newLocal[localIdxB] = { ...teamB, order: orderA }
     
-    // Sort local teams immediately
     newLocal.sort((a, b) => a.order - b.order)
     setLocalTeams(newLocal)
 
-    // Fire and forget Firestore update to not block UI
     Promise.all([
       updateDoc(refA, { order: orderB }),
       updateDoc(refB, { order: orderA })
@@ -228,54 +244,36 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
     setEditingRoster(null)
   }
 
-  const renderSlot = (index) => {
+  const renderSlot = (index, alignRight = false) => {
     const team = seeded[index]
     return (
       <div 
-        onClick={() => !team && selectedTeam && handleSeed(index)}
-        className={`group h-16 rounded-2xl flex items-center px-4 transition-all duration-300 border relative overflow-hidden
+        onClick={() => handleSeed(index)}
+        className={`h-11 w-44 rounded-xl flex items-center px-3 cursor-pointer transition-all duration-300 border relative z-10
           ${team 
-            ? 'border-blue-200 bg-white shadow-md hover:shadow-lg' 
-            : 'border-slate-200 border-dashed bg-slate-50/50 hover:bg-blue-50/50 hover:border-blue-300 cursor-pointer'}
+            ? 'border-yellow-200 bg-white shadow-sm hover:shadow-md' 
+            : selectedTeam 
+              ? 'border-blue-500 border-dashed bg-blue-50 scale-105 shadow-lg ring-2 ring-blue-100' 
+              : 'border-slate-200 border-dashed hover:border-yellow-300 hover:bg-slate-50 bg-white/40'}
+          ${alignRight ? 'flex-row-reverse text-right' : ''}
         `}
       >
-        <div className="flex items-center gap-4 w-full">
-          <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center text-[10px] font-black text-slate-400 flex-shrink-0 border border-slate-200">
-            {index + 1}
-          </div>
-
-          {team ? (
-            <>
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden border border-slate-100">
-                 {team.logoUrl ? (
-                   <img src={team.logoUrl} alt={team.name} className="w-full h-full object-cover" />
-                 ) : (
-                   <Shield className="w-5 h-5 text-slate-300" />
-                 )}
-              </div>
-              <div className="flex flex-col flex-1 min-w-0">
-                <span className="font-black text-sm text-slate-800 truncate tracking-tight uppercase">{team.name}</span>
-                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{team.short}</span>
-              </div>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleSeed(index, null)
-                }}
-                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                title="Quitar"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col flex-1">
-              <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                {selectedTeam ? 'Click para asignar ' + selectedTeam.name : 'Espacio Vacío'}
-              </span>
+        {team ? (
+          <div className={`flex items-center gap-2 w-full ${alignRight ? 'justify-end' : 'justify-start'}`}>
+            <div className="w-5 h-5 rounded-md bg-white flex items-center justify-center flex-shrink-0 shadow-sm overflow-hidden border border-slate-200">
+               {team.logoUrl ? (
+                 <img src={team.logoUrl} alt={team.name} className="w-full h-full object-cover" />
+               ) : (
+                 <Shield className="w-3 h-3 text-slate-300" />
+               )}
             </div>
-          )}
-        </div>
+            <span className="font-bold text-[11px] text-slate-800 truncate tracking-tight">{team.name}</span>
+          </div>
+        ) : (
+          <span className={`text-slate-400 text-[8px] font-black uppercase tracking-widest w-full ${alignRight ? 'text-right' : 'text-left'} ${selectedTeam ? 'text-blue-600' : ''}`}>
+            {selectedTeam ? 'Click Aquí' : `Slot ${index + 1}`}
+          </span>
+        )}
       </div>
     )
   }
@@ -283,7 +281,7 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
   return (
     <div className="flex flex-col gap-6 h-full animate-fade-in pt-2 pb-8 max-w-7xl mx-auto w-full">
       <div className="text-center space-y-1 mb-2">
-        <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-blue-600 to-red-500 tracking-tighter uppercase drop-shadow-sm">Fútbol Profesional Colombiano</h2>
+        <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 via-blue-600 to-red-500 tracking-tighter uppercase italic drop-shadow-sm">Fútbol Profesional Colombiano</h2>
         <p className="text-slate-500 text-sm font-medium">Administra tu base de datos de equipos y elige 8 para los Cuadrangulares/Playoffs.</p>
       </div>
 
@@ -294,7 +292,7 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
              <div className="glass-panel p-1 rounded-[2rem] border border-white/80 shadow-2xl bg-white/80 h-full flex flex-col relative overflow-hidden backdrop-blur-xl">
                <div className="flex flex-col p-5 border-b border-yellow-50 bg-gradient-to-r from-yellow-50/50 via-blue-50/30 to-red-50/20 rounded-t-[2rem] gap-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                    <h3 className="text-base font-black text-slate-900 uppercase tracking-tight italic flex items-center gap-2">
                       <Users className="w-4 h-4 text-blue-600" />
                       Biblioteca Global ({filteredTeams.length})
                     </h3>
@@ -311,23 +309,70 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
                   />
                </div>
                <div className="flex flex-col overflow-y-auto flex-1 custom-scrollbar p-4 gap-2">
-                  {filteredTeams.map(team => (
+                  {filteredTeams.map((team, index) => (
                     <div key={team.id} className="group flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-100 hover:border-blue-200 transition-all shadow-sm">
-                      <div className="flex items-center gap-3">
-                         <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-100">
-                           {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : <Shield className="w-5 h-5 text-slate-300" />}
+                      <div className="flex items-center gap-3 flex-1">
+                         <div className="flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => moveTeam(index, 'up')} disabled={index === 0} className="text-slate-300 hover:text-blue-600 p-0.5 leading-none">
+                               <ArrowUp className="w-3 h-3" />
+                            </button>
+                            <button onClick={() => moveTeam(index, 'down')} disabled={index === filteredTeams.length - 1} className="text-slate-300 hover:text-blue-600 p-0.5 leading-none">
+                               <ArrowDown className="w-3 h-3" />
+                            </button>
                          </div>
-                         <div className="flex flex-col">
-                           <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{team.name}</span>
-                           <span className="text-[10px] font-bold text-slate-400">{team.short}</span>
+
+                         {/* Logo and Upload */}
+                         <label className="relative w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center border border-slate-200 flex-shrink-0 cursor-pointer group/logo overflow-hidden">
+                           {uploading === team.id ? (
+                             <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                           ) : team.logoUrl ? (
+                             <img src={team.logoUrl} alt={team.name} className="w-full h-full object-cover" />
+                           ) : (
+                             <Shield className="w-5 h-5 text-slate-300" />
+                           )}
+                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity">
+                             <ImageIcon className="w-4 h-4 text-white" />
+                           </div>
+                           <input 
+                             type="file" 
+                             accept="image/*" 
+                             className="hidden" 
+                             onChange={(e) => handleImageUpload(team.id, e)}
+                           />
+                         </label>
+
+                         <div className="flex flex-col min-w-0">
+                           <input 
+                             type="text" 
+                             value={team.name}
+                             onChange={(e) => handleNameChange(team.id, e.target.value)}
+                             onBlur={(e) => handleNameBlur(team.id, e.target.value)}
+                             className="bg-transparent border-b border-transparent focus:border-blue-200 outline-none font-bold text-slate-800 focus:text-blue-600 px-1 py-0 text-sm transition-all truncate"
+                             placeholder="Nombre"
+                           />
+                           <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-slate-400">{team.short}</span>
+                              {team.stars > 0 && (
+                                <span className="text-[9px] text-yellow-600 font-black">⭐ {team.stars}</span>
+                              )}
+                           </div>
                          </div>
                       </div>
-                      <button 
-                        onClick={() => toggleWorkspace(team.id)}
-                        className="px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                      >
-                        Añadir a mi grupo
-                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => openRoster(team)} className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar Plantilla">
+                          <Users className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteTeam(team.id, team.userId)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Eliminar">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => toggleWorkspace(team.id)}
+                          className="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap"
+                        >
+                          Añadir
+                        </button>
+                      </div>
                     </div>
                   ))}
                </div>
@@ -379,90 +424,111 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
         </div>
       ) : (
         <div className="flex flex-col xl:flex-row gap-8 items-stretch h-[600px] animate-fade-in">
-          {/* Seeding Area (The 1-8 List) */}
-          <div className="xl:w-[60%] flex flex-col gap-4">
-            <div className="glass-panel p-8 rounded-[2rem] border border-white/80 bg-gradient-to-br from-white/90 to-blue-50/20 backdrop-blur-xl shadow-2xl flex flex-col h-full relative overflow-hidden">
-              <div className="flex items-center justify-between mb-8">
-                <button onClick={() => setSetupMode('selection')} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 flex items-center gap-1 transition-colors">
-                  <ArrowLeft className="w-3 h-3" /> Volver a Selección
-                </button>
-                <div className="text-center">
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter">Siembra del Torneo</h3>
-                  <p className="text-[9px] font-bold text-blue-500 uppercase tracking-widest">Asigna los 8 participantes ({seeded.filter(s => s !== null).length}/8)</p>
-                </div>
-                <div className="w-16 h-1 w-12"></div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto custom-scrollbar pr-2 mb-4">
-                {Array(8).fill(null).map((_, i) => (
-                  <div key={i}>
-                    {renderSlot(i)}
-                  </div>
-                ))}
-              </div>
-
-              {/* Workspace Mini (My Group) */}
-              <div className="mt-auto pt-6 border-t border-slate-100 flex flex-col gap-4">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Elegir de mi grupo:</h4>
-                <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2">
-                  {workspaceTeams.map(team => {
+          {/* Left Panel: Workspace List with Movement */}
+          <div className="xl:w-[40%] flex flex-col gap-4">
+            <div className="glass-panel p-1 rounded-[2rem] border border-white/80 shadow-2xl bg-white/80 h-full flex flex-col relative overflow-hidden backdrop-blur-xl">
+               <div className="flex flex-col p-5 border-b border-yellow-50 bg-gradient-to-r from-yellow-50/50 via-blue-50/30 to-red-50/20 rounded-t-[2rem]">
+                  <button onClick={() => setSetupMode('selection')} className="text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors mb-2">
+                    <ArrowLeft className="w-3 h-3" /> Añadir más equipos
+                  </button>
+                  <h3 className="text-base font-black text-slate-900 uppercase tracking-tight italic">Mi Grupo Seleccionado</h3>
+               </div>
+               <div className="flex flex-col overflow-y-auto flex-1 custom-scrollbar p-3 gap-1">
+                  {workspaceTeams.map((team, index) => {
                     const isSeeded = seeded.find(s => s?.id === team.id)
                     const isSelected = selectedTeam?.id === team.id
                     return (
-                      <div 
-                        key={team.id}
-                        onClick={() => {
-                          const nextEmpty = seeded.findIndex(s => s === null)
-                          if (nextEmpty !== -1) handleSeed(nextEmpty, team)
-                          else setSelectedTeam(isSelected ? null : team)
-                        }}
-                        className={`flex-shrink-0 flex items-center gap-2 p-2 rounded-xl border transition-all cursor-pointer
-                          ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white border-slate-100 hover:border-blue-200'}
-                          ${isSeeded ? 'opacity-30 grayscale pointer-events-none' : ''}
-                        `}
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-100">
-                          {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : <Shield className="w-4 h-4 text-slate-300" />}
-                        </div>
-                        <span className="text-[10px] font-black uppercase pr-2">{team.name}</span>
+                      <div key={team.id} className={`group flex items-center justify-between p-2 rounded-xl transition-all border
+                        ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100 hover:border-yellow-100'}
+                        ${isSeeded ? 'opacity-40 grayscale pointer-events-none' : ''}
+                      `}>
+                         <div className="flex items-center gap-3">
+                           <div className="flex flex-col items-center">
+                             <button onClick={() => moveTeam(index, 'up')} disabled={index === 0} className="text-slate-400 hover:text-blue-600 p-0.5 disabled:opacity-20 transition-colors"><ArrowUp className="w-3 h-3" /></button>
+                             <button onClick={() => moveTeam(index, 'down')} disabled={index === workspaceTeams.length - 1} className="text-slate-400 hover:text-blue-600 p-0.5 disabled:opacity-20 transition-colors"><ArrowDown className="w-3 h-3" /></button>
+                           </div>
+                           <span className="text-[10px] font-black text-blue-500 w-4">{index + 1}</span>
+                           <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-100">
+                             {team.logoUrl ? <img src={team.logoUrl} className="w-full h-full object-cover" /> : <Shield className="w-4 h-4 text-slate-300" />}
+                           </div>
+                           <span className="text-[11px] font-black uppercase text-slate-800">{team.name}</span>
+                         </div>
+                         <div className="flex items-center gap-1.5 ml-2">
+                           <button onClick={() => openRoster(team)} className="p-1.5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Plantilla">
+                             <Users className="w-4 h-4" />
+                           </button>
+                           <button
+                             onClick={() => setSelectedTeam(isSelected ? null : team)}
+                             className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all
+                               ${isSelected ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}
+                           >
+                             {isSelected ? 'Listo' : 'Sembrar'}
+                           </button>
+                         </div>
                       </div>
                     )
                   })}
+               </div>
+               <div className="p-4 bg-slate-50 border-t border-slate-100">
+                  <button
+                    onClick={handleStartWithAutofill}
+                    className="w-full py-4 bg-gradient-to-r from-yellow-400 via-blue-600 to-red-600 rounded-[1.5rem] font-black text-white shadow-lg text-sm uppercase tracking-widest"
+                  >
+                    Comenzar Torneo
+                  </button>
+               </div>
+            </div>
+          </div>
+
+          {/* Right Panel: Bracket Map (Visual) */}
+          <div className="xl:w-[60%] flex flex-col gap-4">
+            <div className="glass-panel p-8 rounded-[2rem] border border-white/80 bg-gradient-to-br from-white/90 to-blue-50/20 backdrop-blur-xl shadow-2xl flex flex-col justify-center h-full relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-400/5 rounded-full blur-3xl pointer-events-none"></div>
+              
+              <div className="flex justify-between items-stretch max-w-2xl mx-auto w-full relative z-10">
+                {/* Left Side (Matches 1 & 2) */}
+                <div className="flex flex-col justify-between gap-10 relative">
+                  <div className="flex flex-col gap-2 relative">
+                    <div className="absolute -right-6 top-1/2 w-6 h-[2px] bg-slate-300"></div>
+                    <div className="absolute -right-6 top-1/2 w-[2px] h-[calc(100%+3rem)] bg-slate-300"></div>
+                    <div className="text-[8px] font-black text-slate-400 uppercase pl-2">Llave 1</div>
+                    {renderSlot(0)}
+                    {renderSlot(1)}
+                  </div>
+                  <div className="flex flex-col gap-2 relative">
+                    <div className="absolute -right-6 top-1/2 w-6 h-[2px] bg-slate-300"></div>
+                    <div className="text-[8px] font-black text-slate-400 uppercase pl-2">Llave 2</div>
+                    {renderSlot(2)}
+                    {renderSlot(3)}
+                  </div>
+                </div>
+
+                {/* Center Area */}
+                <div className="flex flex-col justify-center items-center px-6">
+                   <div className="w-20 h-20 rounded-full bg-white border-4 border-yellow-100 flex flex-col items-center justify-center shadow-xl">
+                     <Trophy className="w-10 h-10 text-yellow-500" />
+                   </div>
+                   <div className="mt-4 text-[9px] font-black text-slate-500 uppercase tracking-widest bg-white px-3 py-1 rounded-full border border-slate-100">PlayOffs</div>
+                </div>
+
+                {/* Right Side (Matches 3 & 4) */}
+                <div className="flex flex-col justify-between gap-10 relative">
+                  <div className="flex flex-col gap-2 relative">
+                    <div className="absolute -left-6 top-1/2 w-6 h-[2px] bg-slate-300"></div>
+                    <div className="absolute -left-6 top-1/2 w-[2px] h-[calc(100%+3rem)] bg-slate-300"></div>
+                    <div className="text-[8px] font-black text-slate-400 uppercase text-right pr-2">Llave 3</div>
+                    {renderSlot(4, true)}
+                    {renderSlot(5, true)}
+                  </div>
+                  <div className="flex flex-col gap-2 relative">
+                    <div className="absolute -left-6 top-1/2 w-6 h-[2px] bg-slate-300"></div>
+                    <div className="text-[8px] font-black text-slate-400 uppercase text-right pr-2">Llave 4</div>
+                    {renderSlot(6, true)}
+                    {renderSlot(7, true)}
+                  </div>
                 </div>
               </div>
             </div>
-
-            <button
-              onClick={handleStartWithAutofill}
-              className="group relative w-full py-4 bg-gradient-to-r from-yellow-400 via-blue-600 to-red-600 bg-[length:200%_auto] animate-gradient-x rounded-[1.5rem] font-black text-base text-white overflow-hidden transition-all transform hover:-translate-y-1 shadow-lg flex-shrink-0"
-            >
-              <span className="relative flex items-center justify-center gap-3 uppercase tracking-widest">
-                Comenzar Torneo
-                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </span>
-            </button>
-          </div>
-
-          {/* Tips / Info Sidebar */}
-          <div className="xl:w-[40%] flex flex-col gap-4">
-             <div className="glass-panel p-10 rounded-[2.5rem] bg-indigo-900 text-white shadow-2xl h-full flex flex-col justify-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                <Trophy className="w-16 h-16 text-yellow-400 mb-8" />
-                <h3 className="text-3xl font-black uppercase tracking-tighter leading-none mb-4 italic">El camino a la Gloria</h3>
-                <p className="text-indigo-200 text-sm font-medium mb-10 leading-relaxed">
-                  Has seleccionado a tus guerreros. Ahora, asígnalos en la lista de siembra. El orden que elijas determinará los cruces iniciales en los PlayOffs. 
-                </p>
-                <div className="flex flex-col gap-3">
-                   <div className="flex items-center gap-3 bg-white/10 p-4 rounded-2xl border border-white/10">
-                      <div className="w-8 h-8 bg-yellow-400 rounded-lg flex items-center justify-center text-indigo-900 font-black">1</div>
-                      <span className="text-xs font-bold uppercase tracking-widest">Siembra tus 8 equipos</span>
-                   </div>
-                   <div className="flex items-center gap-3 bg-white/10 p-4 rounded-2xl border border-white/10">
-                      <div className="w-8 h-8 bg-indigo-400 rounded-lg flex items-center justify-center text-white font-black">2</div>
-                      <span className="text-xs font-bold uppercase tracking-widest">Inicia el sorteo</span>
-                   </div>
-                </div>
-             </div>
           </div>
         </div>
       )}
