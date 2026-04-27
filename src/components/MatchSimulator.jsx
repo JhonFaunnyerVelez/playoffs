@@ -739,43 +739,43 @@ export default function MatchSimulator({ match, onComplete }) {
         </div>
       )}
 
-      <div className="flex flex-col xl:flex-row gap-6 w-full max-w-[1400px] items-stretch animate-fade-in">
-        <div className="flex-1 glass-panel rounded-[2.5rem] p-8 relative border border-white/60 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.1)] bg-gradient-to-br from-white to-slate-50 flex flex-col justify-center min-h-[500px]">
-          <div className="absolute top-6 left-8 flex flex-col gap-0.5">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
-                Árbitro Central
-             </div>
-             <div className="text-sm font-black text-slate-800 italic uppercase tracking-tighter">{referee}</div>
+      <div className="flex flex-col xl:flex-row gap-6 w-full max-w-[1400px] items-stretch animate-fade-in p-2 md:p-0">
+        <div className="flex-1 glass-panel rounded-[2rem] md:rounded-[2.5rem] p-4 md:p-8 relative border border-white/60 shadow-xl bg-gradient-to-br from-white to-slate-50 flex flex-col justify-center min-h-[450px] md:min-h-[500px]">
+          {/* Mobile-optimized Header Badges */}
+          <div className="flex md:block justify-between items-start w-full md:w-auto mb-10 md:mb-0">
+            <div className="md:absolute top-6 left-8 flex flex-col gap-0.5">
+               <div className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <div className="w-1 md:w-1.5 h-1 md:h-1.5 bg-yellow-400 rounded-full"></div>
+                  Árbitro
+               </div>
+               <div className="text-xs md:text-sm font-black text-slate-800 italic uppercase tracking-tighter">{referee}</div>
+            </div>
+
+            <div className="md:absolute top-6 right-8 flex flex-col items-end gap-0.5">
+               <div className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest">{getRoundName()}</div>
+               <div className="text-[10px] md:text-xs font-black text-blue-600 italic uppercase tracking-tighter">{leg?.toUpperCase()}</div>
+            </div>
           </div>
 
-          <div className="absolute top-6 right-8 flex flex-col items-end gap-0.5">
-             <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{getRoundName()}</div>
-             <div className="text-xs font-black text-blue-600 italic uppercase tracking-tighter">{leg.toUpperCase()}</div>
-          </div>
-
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10">
+          <div className="absolute top-16 md:top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10">
             <div className="flex items-center gap-2 bg-white px-4 py-1.5 rounded-xl border border-slate-100 shadow-sm">
               <Timer className={`w-4 h-4 ${(matchPhase === 'regular' && !giantGoal && !activePenalty) ? 'text-indigo-600 animate-spin-slow' : 'text-slate-400'}`} />
-              <span className="font-mono font-black text-xl text-slate-900 tracking-tighter">
+              <span className="text-xl font-mono font-black text-slate-900 tracking-tighter">
                 {matchPhase === 'regular' ? (minute > 90 ? `90+${minute - 90}'` : `${minute}'`) : matchPhase === 'penalties' ? 'P' : 'F'}
               </span>
             </div>
-            <div className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mt-1 bg-slate-100 px-2 py-0.5 rounded-full">
-              {leg === 'ida' ? 'Ida' : 'Vuelta'}
-            </div>
           </div>
 
-          <div className="flex items-start justify-between gap-4 mt-8 w-full relative z-0">
+          <div className="flex flex-col md:flex-row items-center justify-center md:justify-between gap-8 mt-12 md:mt-8 w-full relative z-0">
             {/* Local Team */}
             {renderTeamBlock(leg === 'vuelta' ? team2 : team1, leg === 'vuelta' ? score2 : score1, leg === 'vuelta' ? penHistory2 : penHistory1, leg === 'vuelta' ? !isTeam1Turn : isTeam1Turn)}
             
             {/* Score Center */}
-            <div className="flex flex-col items-center gap-4 px-6 mt-16 w-[320px] flex-shrink-0 relative">
-              <div className="flex items-center gap-6">
-                <span className="text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score2 : score1}</span>
-                <span className="text-4xl text-slate-200 font-black mb-4">-</span>
-                <span className="text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score1 : score2}</span>
+            <div className="flex flex-col items-center gap-4 px-2 md:px-6 md:mt-16 w-full md:w-[320px] flex-shrink-0 relative">
+              <div className="flex items-center gap-4 md:gap-6">
+                <span className="text-5xl md:text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score2 : score1}</span>
+                <span className="text-2xl md:text-4xl text-slate-200 font-black mb-2 md:mb-4">-</span>
+                <span className="text-5xl md:text-7xl font-black font-mono tracking-tighter text-slate-900 leading-none">{leg === 'vuelta' ? score1 : score2}</span>
               </div>
               
               {leg === 'vuelta' && (
@@ -791,10 +791,10 @@ export default function MatchSimulator({ match, onComplete }) {
                 </div>
               )}
               
-              <div className="min-h-[220px] w-full flex flex-col items-center justify-start">
+              <div className="min-h-[180px] md:min-h-[220px] w-full flex flex-col items-center justify-start">
                 {activePenalty && (
                   <div className="mt-4 animate-bounce-in flex flex-col items-center">
-                    <img src={penalImg} alt="Penal" className="w-32 h-auto rounded-xl shadow-lg border-2 border-white" />
+                    <img src={penalImg} alt="Penal" className="w-24 md:w-32 h-auto rounded-xl shadow-lg border-2 border-white" />
                     <p className="text-[10px] font-black text-red-600 uppercase tracking-widest mt-2 animate-pulse">Definiendo el destino...</p>
                     <div className="mt-1 text-2xl font-black text-slate-900">{activePenalty.count}</div>
                   </div>
@@ -802,7 +802,7 @@ export default function MatchSimulator({ match, onComplete }) {
 
                 {activeVar && (
                   <div className="mt-6 animate-bounce-in flex flex-col items-center">
-                    <img src={varImg} alt="VAR" className="w-56 h-auto rounded-3xl shadow-2xl border-4 border-white" />
+                    <img src={varImg} alt="VAR" className="w-48 md:w-56 h-auto rounded-3xl shadow-2xl border-4 border-white" />
                     <p className="text-xs font-black text-blue-600 uppercase tracking-[0.2em] mt-4 animate-pulse text-center leading-relaxed">REVISIÓN GOL<br/>{activeVar.team.name}</p>
                     <div className="mt-2 text-3xl font-black text-slate-900 bg-slate-100 px-6 py-1 rounded-full">{activeVar.count}s</div>
                   </div>
@@ -816,7 +816,7 @@ export default function MatchSimulator({ match, onComplete }) {
         </div>
 
         {/* Events Feed (Right Side) */}
-        <div className="xl:w-[450px] w-full bg-white rounded-[2.5rem] flex flex-col overflow-hidden border border-white shadow-xl relative h-[450px] flex-shrink-0">
+        <div className="xl:w-[450px] w-full bg-white rounded-[2rem] md:rounded-[2.5rem] flex flex-col overflow-hidden border border-white shadow-xl relative h-[400px] md:h-[450px] flex-shrink-0">
           <div className="bg-slate-50/80 backdrop-blur-md p-4 border-b border-slate-100 flex items-center justify-between px-6">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>

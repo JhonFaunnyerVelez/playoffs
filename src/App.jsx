@@ -244,12 +244,12 @@ function App() {
               PLAYOFFS <span className="text-red-600">FPC</span>
             </h1>
           </div>
-          <div className="flex gap-6 text-[11px] font-black uppercase tracking-tighter italic text-slate-400 items-center">
-            <button onClick={() => setPhase('setup')} className={`hover:text-blue-500 transition-colors ${phase === 'setup' ? 'text-blue-600' : ''}`}>1. Config</button>
-            <button onClick={() => { if(phase !== 'setup') setPhase('draw') }} className={`hover:text-blue-500 transition-colors ${phase === 'draw' ? 'text-blue-600' : ''}`}>2. Sorteo</button>
-            <button onClick={() => { if(bracketState.qf[0].team1) setPhase('bracket') }} className={`hover:text-blue-500 transition-colors ${phase === 'bracket' || phase === 'match' ? 'text-blue-600' : ''}`}>3. Torneo</button>
-            <div className="w-px h-4 bg-slate-200 mx-1"></div>
-            <button onClick={() => setPhase('history')} className={`flex items-center gap-1 hover:text-indigo-500 transition-colors ${phase === 'history' ? 'text-indigo-600' : ''}`}>
+          <div className="flex gap-2 md:gap-6 text-[9px] md:text-[11px] font-black uppercase tracking-tighter italic text-slate-400 items-center overflow-x-auto no-scrollbar py-2">
+            <button onClick={() => setPhase('setup')} className={`whitespace-nowrap hover:text-blue-500 transition-colors ${phase === 'setup' ? 'text-blue-600' : ''}`}>1. Config</button>
+            <button onClick={() => { if(phase !== 'setup') setPhase('draw') }} className={`whitespace-nowrap hover:text-blue-500 transition-colors ${phase === 'draw' ? 'text-blue-600' : ''}`}>2. Sorteo</button>
+            <button onClick={() => { if(bracketState.qf[0].team1) setPhase('bracket') }} className={`whitespace-nowrap hover:text-blue-500 transition-colors ${phase === 'bracket' || phase === 'match' ? 'text-blue-600' : ''}`}>3. Torneo</button>
+            <div className="w-px h-4 bg-slate-200 mx-1 flex-shrink-0"></div>
+            <button onClick={() => setPhase('history')} className={`whitespace-nowrap flex items-center gap-1 hover:text-indigo-500 transition-colors ${phase === 'history' ? 'text-indigo-600' : ''}`}>
               Historial
             </button>
             
@@ -286,11 +286,13 @@ function App() {
         )}
 
         {phase === 'bracket' && (
-          <Bracket 
-            bracketState={bracketState} 
-            onSimulateMatch={handleSimulateMatch} 
-            onResetTournament={handleResetTournament}
-          />
+          <div className="overflow-x-auto pb-4">
+            <Bracket 
+              bracketState={bracketState} 
+              onSimulateMatch={handleSimulateMatch} 
+              onResetTournament={handleResetTournament}
+            />
+          </div>
         )}
 
         {phase === 'match' && currentMatch && (
@@ -301,9 +303,25 @@ function App() {
         )}
 
         {phase === 'history' && (
-          <TournamentHistory user={user} />
+          <div className="flex flex-col gap-6 w-full max-w-[1400px]">
+            <TournamentHistory user={user} />
+          </div>
         )}
       </main>
+
+      <footer className="p-6 border-t border-slate-200/50 bg-white/70 backdrop-blur-xl mt-auto">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
+              © {new Date().getFullYear()} PlayOffs FPC 
+            </p>
+          </div>
+          <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] italic">
+            Desarrollado por <a href="https://portafolio-39270.web.app/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-red-600 transition-all border-b-2 border-transparent hover:border-red-600 pb-0.5">Jhon Vélez</a>
+          </p>
+        </div>
+      </footer>
     </div>
   )
 }
