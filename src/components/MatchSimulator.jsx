@@ -27,10 +27,11 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
   const [giantStoppage, setGiantStoppage] = useState(null) // count
   const [giantIncident, setGiantIncident] = useState(null)
   const [giantControl, setGiantControl] = useState(false)
+  const [showChampionOverlay, setShowChampionOverlay] = useState(false)
   const [incidentOccurred, setIncidentOccurred] = useState(false)
   const [incidentCount, setIncidentCount] = useState(0)
   const [targetIncidentMinute] = useState(() => {
-    if (round === 'final') {
+    if (round === 'final' && leg === 'vuelta') {
       const min = Math.floor(Math.random() * 5) + 70 // Random entre 70 y 74
       console.log(`[DEBUG] Incidente programado para el minuto: ${min}`)
       return min
@@ -49,7 +50,12 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
   // Estado único para cualquier penal (regular o tanda)
   // { type: 'regular' | 'shootout', team, player, count }
   const [activePenalty, setActivePenalty] = useState(null)
-  const [stoppageTime] = useState(() => Math.floor(Math.random() * 6) + 3) // 3, 4, 5, 6, 7, 8
+  const [stoppageTime] = useState(() => {
+    if (round === 'final' && leg === 'vuelta') {
+      return Math.floor(Math.random() * 5) + 12 // 12, 13, 14, 15, 16
+    }
+    return Math.floor(Math.random() * 6) + 3 // 3, 4, 5, 6, 7, 8
+  })
 
   const [yellowCards, setYellowCards] = useState({ [team1.id]: [], [team2.id]: [] })
   const [redCards, setRedCards] = useState({ [team1.id]: [], [team2.id]: [] })
@@ -145,11 +151,14 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
         setGiantStoppage(stoppageTime)
         setTimeout(() => setGiantStoppage(null), 3000)
         
+        const isFinalVuelta = round === 'final' && leg === 'vuelta'
         setEvents(prev => [{ 
           minute: '90', 
-          message: `⏱️ +${stoppageTime} MINUTOS DE ADICIÓN`, 
-          icon: <Timer className="w-5 h-5 text-amber-500" />, 
-          color: 'text-amber-600 font-black' 
+          message: isFinalVuelta 
+            ? `⏱️ +${stoppageTime} MINUTOS (POR INCIDENTES EN TRIBUNA)` 
+            : `⏱️ +${stoppageTime} MINUTOS DE ADICIÓN`, 
+          icon: <Timer className={`w-5 h-5 ${isFinalVuelta ? 'text-red-500' : 'text-amber-500'}`} />, 
+          color: isFinalVuelta ? 'text-red-600 font-black animate-pulse' : 'text-amber-600 font-black' 
         }, ...prev])
       }
 
@@ -629,6 +638,17 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
       color: 'text-indigo-600 font-black text-xl uppercase tracking-tighter',
       teamId: 'sys' 
     }, ...prev])
+
+    // Lógica para mostrar pantalla de campeón en la final de vuelta
+    if (round === 'final' && leg === 'vuelta' && matchWinner) {
+      setTimeout(() => {
+        setShowChampionOverlay(true)
+        // Cerrar automáticamente a los 10 segundos
+        setTimeout(() => {
+          onComplete(round, index, leg, score1, score2, matchWinner)
+        }, 10000)
+      }, 2000)
+    }
   }
 
   const forcePenalties = () => {
@@ -1188,6 +1208,61 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
           </span>
         </button>
       </div>
+
+      {/* Champion Overlay */}
+      {showChampionOverlay && winner && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/95 backdrop-blur-2xl animate-fade-in">
+          <div className="relative flex flex-col items-center text-center p-8 max-w-4xl w-full">
+            {/* Glow effect background */}
+            <div className="absolute inset-0 bg-yellow-500/20 blur-[120px] rounded-full animate-pulse"></div>
+            
+            <div className="relative flex flex-col items-center">
+              {/* Shield/Logo Area */}
+              <div 
+                className="w-64 h-64 md:w-80 md:h-80 rounded-[3rem] bg-white p-6 shadow-[0_0_100px_rgba(234,179,8,0.4)] border-8 border-yellow-400 mb-12 overflow-hidden transform"
+                style={{ animation: 'champScale 1s cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
+              >
+                {winner.logoUrl ? (
+                  <img src={winner.logoUrl} alt={winner.name} className="w-full h-full object-cover rounded-[1.5rem]" />
+                ) : (
+                  <Shield className="w-full h-full text-slate-200" />
+                )}
+              </div>
+              
+              <div className="flex flex-col gap-2">
+                <h2 
+                  className="text-white text-3xl md:text-5xl font-black uppercase tracking-[0.5em] drop-shadow-2xl mb-2"
+                  style={{ animation: 'champSlide 0.8s ease-out 0.3s backwards' }}
+                >
+                  ¡CAMPEÓN!
+                </h2>
+                <h1 
+                  className="text-6xl md:text-9xl font-black bg-gradient-to-b from-yellow-200 via-yellow-400 to-yellow-600 bg-clip-text text-transparent uppercase tracking-tighter italic drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]"
+                  style={{ animation: 'champSlide 0.8s ease-out 0.5s backwards' }}
+                >
+                  {winner.name}
+                </h1>
+              </div>
+              
+              <div 
+                className="mt-16 flex items-center gap-6"
+                style={{ animation: 'fadeIn 2s ease-out 1s backwards' }}
+              >
+                <div className="h-px w-24 bg-gradient-to-r from-transparent to-yellow-500"></div>
+                <p className="text-yellow-500 font-black uppercase tracking-[0.4em] text-sm animate-pulse">Gloria Eterna</p>
+                <div className="h-px w-24 bg-gradient-to-l from-transparent to-yellow-500"></div>
+              </div>
+
+              <div 
+                className="mt-8 text-white/30 text-[10px] font-black uppercase tracking-widest"
+                style={{ animation: 'fadeIn 1s ease-out 2s backwards' }}
+              >
+                Regresando al torneo en unos segundos...
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
