@@ -3,6 +3,9 @@ import { Timer, Goal, AlertTriangle, ShieldAlert, CheckCircle2, XCircle, Hand, T
 import penalImg from '../assets/penal.png'
 import varImg from '../assets/VAR.png'
 import callingVarImg from '../assets/llamandoVar.png'
+import incidenteImg from '../assets/incidente.png'
+import incidente2Img from '../assets/incidente2.png'
+import incidente3Img from '../assets/incidente3.png'
 
 export default function MatchSimulator({ match, onComplete, onBack, user, realismEnabled, tournamentTeams }) {
   const { team1, team2, round, index, leg, matchData } = match
@@ -22,6 +25,18 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
   const [giantVar, setGiantVar] = useState(null) // { type: 'calling' | 'confirmed' | 'annulled', team, player }
   const [activeVar, setActiveVar] = useState(null) // { team, player, count }
   const [giantStoppage, setGiantStoppage] = useState(null) // count
+  const [giantIncident, setGiantIncident] = useState(null)
+  const [giantControl, setGiantControl] = useState(false)
+  const [incidentOccurred, setIncidentOccurred] = useState(false)
+  const [incidentCount, setIncidentCount] = useState(0)
+  const [targetIncidentMinute] = useState(() => {
+    if (round === 'final') {
+      const min = Math.floor(Math.random() * 5) + 70 // Random entre 70 y 74
+      console.log(`[DEBUG] Incidente programado para el minuto: ${min}`)
+      return min
+    }
+    return null
+  })
 
   const [penHistory1, setPenHistory1] = useState([])
   const [penHistory2, setPenHistory2] = useState([])
@@ -98,7 +113,7 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
 
   // Bucle de partido regular
   useEffect(() => {
-    if (matchPhase !== 'regular' || giantGoal || activePenalty || activeVar || giantVar || giantMiss || giantStoppage || giantPenalty) return
+    if (matchPhase !== 'regular' || giantGoal || activePenalty || activeVar || giantVar || giantMiss || giantStoppage || giantPenalty || giantIncident || giantControl) return
 
     const maxTime = 90 + stoppageTime
 
@@ -139,6 +154,41 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
       }
 
       setMinute(prev => prev + 1)
+
+      // LOGICA DE INCIDENTE EN TRIBUNA (FINAL 70+)
+      if (targetIncidentMinute && (minute + 1) === targetIncidentMinute && !incidentOccurred) {
+          console.log("!!! DISPARANDO SECUENCIA DE INCIDENTES EN TRIBUNA !!!")
+          setGiantIncident(true)
+          setIncidentOccurred(true)
+          setIncidentCount(18) // 3 imágenes * 6 segundos = 18s
+          
+          setEvents(prev => [{ 
+            minute: minute + 1, 
+            message: '⚠️ ¡GRAVES INCIDENTES EN LA TRIBUNA! El partido se detiene', 
+            icon: <AlertTriangle className="w-5 h-5 text-red-500" />, 
+            color: 'text-red-600 font-black uppercase tracking-widest',
+            teamId: 'sys' 
+          }, ...prev])
+
+          setTimeout(() => {
+            setGiantIncident(null)
+            setIncidentCount(0)
+            setGiantControl(true) // Mostrar mensaje de situación controlada
+            
+            setTimeout(() => {
+              setGiantControl(false)
+              setEvents(prev => [{ 
+                minute: minute + 1, 
+                message: '✅ Situación controlada tras intervención. Se reanuda el juego', 
+                icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" />, 
+                color: 'text-emerald-600 font-bold',
+                teamId: 'sys' 
+              }, ...prev])
+            }, 4000) // 4 segundos de mensaje de control
+          }, 18000)
+          return
+      }
+
       // Solo generamos eventos si NO estamos en el último segundo del partido
       if (minute + 1 < maxTime) {
         generateRandomEvent(minute + 1)
@@ -146,7 +196,7 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
     }, 400)
 
     return () => clearTimeout(timer)
-  }, [minute, matchPhase, giantGoal, activePenalty, activeVar, giantVar, giantMiss, stoppageTime, giantStoppage, giantPenalty])
+  }, [minute, matchPhase, giantGoal, activePenalty, activeVar, giantVar, giantMiss, stoppageTime, giantStoppage, giantPenalty, giantIncident, round, previousIda1, score1, previousIda2, score2, leg, team1, team2, incidentOccurred, targetIncidentMinute, giantControl])
 
   // Motor de resolución de la cuenta regresiva de penales
   useEffect(() => {
@@ -274,6 +324,17 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
       }
     }
   }, [activeVar, minute])
+
+  // Motor de resolución de Incidentes (Contador)
+  useEffect(() => {
+    if (!giantIncident || incidentCount <= 0) return
+
+    const timer = setTimeout(() => {
+      setIncidentCount(prev => prev - 1)
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [giantIncident, incidentCount])
 
   // Bucle de tanda de penales
   useEffect(() => {
@@ -804,6 +865,55 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
       </div>
 
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] pointer-events-none opacity-[0.03] bg-[radial-gradient(circle_at_center,_#000_0%,_transparent_70%)] mix-blend-multiply rounded-full"></div>
+
+      {giantIncident && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-red-950/80 backdrop-blur-xl">
+          <div className="flex flex-col items-center animate-giantGoal">
+            <h1 
+              className="text-6xl md:text-8xl font-black italic tracking-tighter drop-shadow-[0_15px_15px_rgba(0,0,0,0.5)] uppercase leading-none text-white mb-8 text-center"
+              style={{ WebkitTextStroke: `3px #000` }}
+            >
+              ¡INCIDENTE EN LA TRIBUNA!
+            </h1>
+            <div className="w-80 h-80 bg-white p-3 rounded-[3rem] shadow-[0_0_50px_rgba(255,0,0,0.3)] animate-pop-out overflow-hidden border-8 border-red-600 relative">
+               {incidentCount > 12 ? (
+                 <img key="img1" src={incidenteImg} alt="Incidente 1" className="w-full h-full object-cover rounded-[2rem] animate-fade-in" />
+               ) : incidentCount > 6 ? (
+                 <img key="img2" src={incidente2Img} alt="Incidente 2" className="w-full h-full object-cover rounded-[2rem] animate-fade-in" />
+               ) : (
+                 <img key="img3" src={incidente3Img} alt="Incidente 3" className="w-full h-full object-cover rounded-[2rem] animate-fade-in" />
+               )}
+               <div className="absolute inset-0 bg-gradient-to-t from-red-600/20 to-transparent"></div>
+            </div>
+            <div className="mt-10 bg-white px-12 py-4 rounded-full shadow-2xl border-4 border-red-600 flex flex-col items-center">
+              <p className="text-xl font-black text-red-600 uppercase tracking-[0.2em] italic mb-2">Reporte de Disturbios ({Math.ceil((19 - incidentCount) / 6)}/3)</p>
+              <div className="flex items-center gap-4 bg-red-50 px-6 py-2 rounded-2xl border-2 border-red-200">
+                <Timer className="w-6 h-6 text-red-600 animate-pulse" />
+                <span className="text-4xl font-black text-slate-900 font-mono tracking-tighter">{incidentCount}s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {giantControl && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-emerald-950/40 backdrop-blur-md">
+          <div className="flex flex-col items-center animate-giantGoal">
+            <div className="bg-emerald-500 text-white px-8 py-2 rounded-t-2xl font-black uppercase tracking-[0.4em] text-xs shadow-xl">
+              Seguridad FPC
+            </div>
+            <div className="bg-white px-12 py-10 rounded-b-[3rem] rounded-tr-[3rem] shadow-2xl flex flex-col items-center border-b-8 border-emerald-500">
+               <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6 animate-bounce">
+                 <CheckCircle2 className="w-12 h-12 text-emerald-600" />
+               </div>
+               <h1 className="text-6xl font-black italic tracking-tighter text-slate-900 leading-none uppercase text-center">
+                 SITUACIÓN<br/>CONTROLADA
+               </h1>
+               <p className="text-lg font-black uppercase tracking-widest text-emerald-600 mt-6 italic animate-pulse">Reanudando el partido...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {giantMiss && (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center pointer-events-none bg-red-900/60 backdrop-blur-md">
