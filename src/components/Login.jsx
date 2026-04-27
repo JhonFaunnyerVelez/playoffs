@@ -32,7 +32,7 @@ export default function Login() {
         </div>
         
         <h1 className="text-4xl font-black text-white uppercase tracking-tighter italic mb-2">
-          Playoffs <span className="text-red-500">FPC</span>
+          Playoffs <span className="text-blue-500">Vendehumos</span> <span className="text-red-500">FPC</span>
         </h1>
         <p className="text-slate-300 font-medium mb-10">Inicia sesión para crear tu propia liga y guardar tu historial.</p>
 

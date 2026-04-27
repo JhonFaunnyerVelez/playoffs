@@ -241,7 +241,7 @@ function App() {
               <img src={colombiaLogo} alt="Logo" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-xl font-black uppercase tracking-tighter italic text-slate-900">
-              PLAYOFFS <span className="text-red-600">FPC</span>
+              PLAYOFFS <span className="text-blue-600">VENDEHUMOS</span> <span className="text-red-600">FPC</span>
             </h1>
           </div>
           <div className="flex gap-2 md:gap-6 text-[9px] md:text-[11px] font-black uppercase tracking-tighter italic text-slate-400 items-center overflow-x-auto no-scrollbar py-2">
@@ -314,7 +314,7 @@ function App() {
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full"></div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">
-              © {new Date().getFullYear()} PlayOffs FPC 
+              © {new Date().getFullYear()} PlayOffs <span className="text-blue-600">Vendehumos</span> FPC 
             </p>
           </div>
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] italic">
