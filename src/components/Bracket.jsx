@@ -1,6 +1,6 @@
-import { Trophy, Play, Shield, Save } from 'lucide-react'
+import { Trophy, Play, Shield, Save, ArrowLeft } from 'lucide-react'
 
-export default function Bracket({ bracketState, onSimulateMatch, onResetTournament }) {
+export default function Bracket({ bracketState, onSimulateMatch, onResetTournament, onBack }) {
   
   const renderMatch = (match, round, index) => {
     const isReady = match.team1 && match.team2
@@ -99,8 +99,15 @@ export default function Bracket({ bracketState, onSimulateMatch, onResetTourname
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center animate-fade-in py-8">
-      
+    <div className="flex-1 flex flex-col items-center justify-center animate-fade-in py-8 relative">
+      <button 
+        onClick={onBack}
+        className="absolute left-0 top-0 p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Volver
+      </button>
+
       <div className="mb-8 text-center">
         <h2 className="text-4xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">
           Fase de <span className="text-blue-600">Playoffs</span>

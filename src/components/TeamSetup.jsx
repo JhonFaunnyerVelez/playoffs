@@ -4,7 +4,7 @@ import { doc, updateDoc, deleteDoc, addDoc, collection } from 'firebase/firestor
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage'
 import { db, storage } from '../firebase'
 
-export default function TeamSetup({ teams, onStartDraw, user }) {
+export default function TeamSetup({ teams, onStartDraw, user, initialRealism }) {
   const [seeded, setSeeded] = useState(Array(8).fill(null))
   const [selectedTeam, setSelectedTeam] = useState(null)
   
@@ -15,6 +15,7 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
     const saved = localStorage.getItem(`workspace_${user?.uid}`)
     return saved ? JSON.parse(saved) : []
   })
+  const [draggedItemIndex, setDraggedItemIndex] = useState(null)
 
   useEffect(() => {
     localStorage.setItem(`workspace_${user?.uid}`, JSON.stringify(workspaceIds))
@@ -41,8 +42,12 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
   // Roster editing state
   const [editingRoster, setEditingRoster] = useState(null) // ID of the team
   const [rosterDraft, setRosterDraft] = useState([])
+  const [nameDraft, setNameDraft] = useState('')
+  const [shortDraft, setShortDraft] = useState('')
   const [uploading, setUploading] = useState(null)
   const [setupMode, setSetupMode] = useState('selection') // 'selection' | 'seeding'
+  const [realismEnabled, setRealismEnabled] = useState(initialRealism || false)
+  const hasSeeds = seeded.some(s => s !== null)
 
   const handleImageUpload = async (teamId, e) => {
     const file = e.target.files?.[0]
@@ -105,7 +110,21 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
 
     // Pasamos el array 'seeded' intacto (con nulls en donde no se sembró manualmente)
     // y el array de 8 equipos que van a participar (selectedForDraw)
-    onStartDraw(seeded, selectedForDraw)
+    onStartDraw(seeded, selectedForDraw, realismEnabled)
+  }
+
+  const handleStartRandom = () => {
+    if (workspaceTeams.length < 8) {
+      alert("Necesitas al menos 8 equipos en 'Mi Grupo Personal' para comenzar.")
+      return
+    }
+    
+    // Pick 8 random teams from workspaceTeams
+    const shuffled = [...workspaceTeams].sort(() => Math.random() - 0.5)
+    const selected = shuffled.slice(0, 8)
+    
+    // Start without manual seeds
+    onStartDraw(Array(8).fill(null), selected, realismEnabled)
   }
 
   const handleNameChange = (id, newName) => {
@@ -123,19 +142,12 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
     }
   }
 
-  const handleCreateTeam = async () => {
-    const newTeam = {
-      name: 'Nuevo Equipo',
-      short: 'NVO',
-      color: '#ffffff',
-      bg: '#94a3b8',
-      players: Array(11).fill('Jugador'),
-      order: teams.length > 0 ? Math.max(...teams.map(t => t.order)) + 1 : 1,
-      userId: user.uid,
-      stars: 0
-    }
-    const docRef = await addDoc(collection(db, 'teams'), newTeam)
-    setWorkspaceIds(prev => [...prev, docRef.id])
+  const handleCreateTeam = () => {
+    // Open editor immediately with default values, but don't save to DB yet
+    setEditingRoster('new')
+    setRosterDraft(Array(11).fill('Jugador'))
+    setNameDraft('Nuevo Equipo')
+    setShortDraft('NVO')
   }
 
   const handleDeleteTeam = async (id, teamUserId) => {
@@ -210,6 +222,35 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
     ]).catch(err => console.error("Error moving team:", err))
   }
 
+  const handleDragStart = (e, index) => {
+    setDraggedItemIndex(index)
+    e.dataTransfer.effectAllowed = 'move'
+    // For transparent image during drag (optional)
+    const ghost = e.currentTarget.cloneNode(true)
+    ghost.style.opacity = '0.5'
+  }
+
+  const handleDragOver = (e) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault()
+    if (draggedItemIndex === null || draggedItemIndex === targetIndex) {
+      setDraggedItemIndex(null)
+      return
+    }
+
+    const newIds = [...workspaceIds]
+    const itemToMove = newIds[draggedItemIndex]
+    newIds.splice(draggedItemIndex, 1)
+    newIds.splice(targetIndex, 0, itemToMove)
+    
+    setWorkspaceIds(newIds)
+    setDraggedItemIndex(null)
+  }
+
   const handleSeed = (index, forcedTeam = null) => {
     const teamToSeed = forcedTeam || selectedTeam
     if (!teamToSeed) {
@@ -236,11 +277,42 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
   const openRoster = (team) => {
     setEditingRoster(team.id)
     setRosterDraft([...team.players])
+    setNameDraft(team.name)
+    setShortDraft(team.short)
   }
 
   const saveRoster = async () => {
     if (!editingRoster) return
-    await updateDoc(doc(db, 'teams', editingRoster), { players: rosterDraft })
+    
+    const data = { 
+      players: rosterDraft,
+      name: nameDraft,
+      short: shortDraft.toUpperCase()
+    }
+
+    if (editingRoster === 'new') {
+      const newTeamData = {
+        ...data,
+        color: '#ffffff',
+        bg: '#94a3b8',
+        order: teams.length > 0 ? Math.max(...teams.map(t => t.order)) + 1 : 1,
+        userId: user.uid,
+        stars: 0
+      }
+      try {
+        const docRef = await addDoc(collection(db, 'teams'), newTeamData)
+        setWorkspaceIds(prev => [...prev, docRef.id])
+      } catch (error) {
+        console.error("Error creating team:", error)
+      }
+    } else {
+      try {
+        await updateDoc(doc(db, 'teams', editingRoster), data)
+      } catch (error) {
+        console.error("Error updating roster:", error)
+      }
+    }
+    
     setEditingRoster(null)
   }
 
@@ -313,11 +385,11 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
                     <div key={team.id} className="group flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-100 hover:border-blue-200 transition-all shadow-sm">
                       <div className="flex items-center gap-3 flex-1">
                          <div className="flex flex-col items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => moveTeam(index, 'up')} disabled={index === 0} className="text-slate-300 hover:text-blue-600 p-0.5 leading-none">
-                               <ArrowUp className="w-3 h-3" />
+                            <button onClick={() => moveTeam(index, 'up')} disabled={index === 0} className="text-slate-500 hover:text-blue-600 p-0.5 leading-none transition-colors">
+                               <ArrowUp className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => moveTeam(index, 'down')} disabled={index === filteredTeams.length - 1} className="text-slate-300 hover:text-blue-600 p-0.5 leading-none">
-                               <ArrowDown className="w-3 h-3" />
+                            <button onClick={() => moveTeam(index, 'down')} disabled={index === filteredTeams.length - 1} className="text-slate-500 hover:text-blue-600 p-0.5 leading-none transition-colors">
+                               <ArrowDown className="w-3.5 h-3.5" />
                             </button>
                          </div>
 
@@ -360,15 +432,15 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <button onClick={() => openRoster(team)} className="p-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar Plantilla">
+                        <button onClick={() => openRoster(team)} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar Plantilla">
                           <Users className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleDeleteTeam(team.id, team.userId)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Eliminar">
+                        <button onClick={() => handleDeleteTeam(team.id, team.userId)} className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Eliminar">
                           <Trash2 className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => toggleWorkspace(team.id)}
-                          className="px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap"
+                          className="px-3 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm whitespace-nowrap"
                         >
                           Añadir
                         </button>
@@ -403,7 +475,7 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
                        </div>
                        <button 
                          onClick={() => toggleWorkspace(team.id)}
-                         className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                         className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                        >
                          <Trash2 className="w-4 h-4" />
                        </button>
@@ -432,20 +504,42 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
                     <ArrowLeft className="w-3 h-3" /> Añadir más equipos
                   </button>
                   <h3 className="text-base font-black text-slate-900 uppercase tracking-tight italic">Mi Grupo Seleccionado</h3>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mt-1">El torneo se iniciará con los primeros 8 equipos según su posición en la tabla.</p>
+                  
+                  <div className="mt-3 flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200 w-fit">
+                    <input 
+                      type="checkbox" 
+                      id="realism" 
+                      checked={realismEnabled}
+                      onChange={(e) => setRealismEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <label htmlFor="realism" className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer">Asignar Realismo (+ Probabilidad por posición)</label>
+                  </div>
                </div>
                <div className="flex flex-col overflow-y-auto flex-1 custom-scrollbar p-3 gap-1">
                   {workspaceTeams.map((team, index) => {
                     const isSeeded = seeded.find(s => s?.id === team.id)
                     const isSelected = selectedTeam?.id === team.id
+                    const isDragging = draggedItemIndex === index
+
                     return (
-                      <div key={team.id} className={`group flex items-center justify-between p-2 rounded-xl transition-all border
-                        ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100 hover:border-yellow-100'}
-                        ${isSeeded ? 'opacity-40 grayscale pointer-events-none' : ''}
-                      `}>
+                      <div 
+                        key={team.id} 
+                        draggable={!isSeeded}
+                        onDragStart={(e) => handleDragStart(e, index)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, index)}
+                        className={`group flex items-center justify-between p-2 rounded-xl transition-all border cursor-move
+                          ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-slate-100 hover:border-yellow-100'}
+                          ${isSeeded ? 'opacity-40 grayscale pointer-events-none cursor-not-allowed' : ''}
+                          ${isDragging ? 'opacity-20 scale-95 border-dashed border-blue-400' : ''}
+                        `}
+                      >
                          <div className="flex items-center gap-3">
                            <div className="flex flex-col items-center">
-                             <button onClick={() => moveTeam(index, 'up')} disabled={index === 0} className="text-slate-400 hover:text-blue-600 p-0.5 disabled:opacity-20 transition-colors"><ArrowUp className="w-3 h-3" /></button>
-                             <button onClick={() => moveTeam(index, 'down')} disabled={index === workspaceTeams.length - 1} className="text-slate-400 hover:text-blue-600 p-0.5 disabled:opacity-20 transition-colors"><ArrowDown className="w-3 h-3" /></button>
+                             <button onClick={() => moveTeam(index, 'up')} disabled={index === 0} className="text-slate-500 hover:text-blue-600 p-0.5 disabled:opacity-20 transition-colors"><ArrowUp className="w-3 h-3" /></button>
+                             <button onClick={() => moveTeam(index, 'down')} disabled={index === workspaceTeams.length - 1} className="text-slate-500 hover:text-blue-600 p-0.5 disabled:opacity-20 transition-colors"><ArrowDown className="w-3 h-3" /></button>
                            </div>
                            <span className="text-[10px] font-black text-blue-500 w-4">{index + 1}</span>
                            <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center overflow-hidden border border-slate-100">
@@ -454,13 +548,19 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
                            <span className="text-[11px] font-black uppercase text-slate-800">{team.name}</span>
                          </div>
                          <div className="flex items-center gap-1.5 ml-2">
-                           <button onClick={() => openRoster(team)} className="p-1.5 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Plantilla">
+                           {realismEnabled && index < 8 && (
+                              <div className="flex flex-col items-end justify-center px-3 border-r border-slate-100 mr-1 animate-fade-in">
+                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none">Realismo</span>
+                                <span className="text-[10px] font-black text-blue-600">+{8 - index}%</span>
+                              </div>
+                           )}
+                           <button onClick={() => openRoster(team)} className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Ver Plantilla">
                              <Users className="w-4 h-4" />
                            </button>
                            <button
                              onClick={() => setSelectedTeam(isSelected ? null : team)}
-                             className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all
-                               ${isSelected ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}
+                             className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all border-2
+                               ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-blue-600 text-blue-600'}`}
                            >
                              {isSelected ? 'Listo' : 'Sembrar'}
                            </button>
@@ -469,13 +569,22 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
                     )
                   })}
                </div>
-               <div className="p-4 bg-slate-50 border-t border-slate-100">
+               <div className="p-4 bg-slate-50 border-t border-slate-100 flex flex-col gap-3">
                   <button
                     onClick={handleStartWithAutofill}
-                    className="w-full py-4 bg-gradient-to-r from-yellow-400 via-blue-600 to-red-600 rounded-[1.5rem] font-black text-white shadow-lg text-sm uppercase tracking-widest"
+                    className="w-full py-4 bg-gradient-to-r from-yellow-400 via-blue-600 to-red-600 rounded-[1.5rem] font-black text-white shadow-lg text-sm uppercase tracking-widest hover:-translate-y-1 transition-all"
                   >
                     Comenzar Torneo
                   </button>
+                  {!hasSeeds && (
+                    <button
+                      onClick={handleStartRandom}
+                      disabled={workspaceTeams.length < 8}
+                      className="w-full py-3 bg-white border-2 border-blue-600 rounded-[1.5rem] font-black text-blue-600 text-xs uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                      Sortear 8 Aleatorios
+                    </button>
+                  )}
                </div>
             </div>
           </div>
@@ -559,23 +668,56 @@ export default function TeamSetup({ teams, onStartDraw, user }) {
               </button>
             </div>
             
-            <div className="p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4 custom-scrollbar bg-white">
-              {rosterDraft.map((player, idx) => (
-                <div key={idx} className="flex flex-col gap-1.5 p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-100 hover:bg-white transition-all group">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Jugador {idx + 1}</span>
+            <div className="p-8 overflow-y-auto flex flex-col gap-8 custom-scrollbar bg-white">
+              {/* Name and Short Name section */}
+              <div className="grid grid-cols-3 gap-4 p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                <div className="col-span-2 flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre del Equipo</label>
                   <input 
                     type="text"
-                    value={player}
-                    onChange={(e) => {
-                      const newDraft = [...rosterDraft]
-                      newDraft[idx] = e.target.value
-                      setRosterDraft(newDraft)
-                    }}
-                    className="bg-transparent font-bold text-slate-800 outline-none w-full text-base focus:text-indigo-600 transition-colors"
-                    placeholder={`Nombre del jugador ${idx + 1}`}
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-400/50 transition-all"
+                    placeholder="Ej: Atlético Nacional"
                   />
                 </div>
-              ))}
+                <div className="col-span-1 flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Sigla</label>
+                  <input 
+                    type="text"
+                    maxLength={3}
+                    value={shortDraft}
+                    onChange={(e) => setShortDraft(e.target.value)}
+                    className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-400/50 transition-all uppercase text-center"
+                    placeholder="ABC"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
+                  <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-[0.2em]">Listado de Jugadores</h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {rosterDraft.map((player, idx) => (
+                    <div key={idx} className="flex flex-col gap-1.5 p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:border-indigo-100 hover:bg-white transition-all group">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Jugador {idx + 1}</span>
+                      <input 
+                        type="text"
+                        value={player}
+                        onChange={(e) => {
+                          const newDraft = [...rosterDraft]
+                          newDraft[idx] = e.target.value
+                          setRosterDraft(newDraft)
+                        }}
+                        className="bg-transparent font-bold text-slate-800 outline-none w-full text-base focus:text-indigo-600 transition-colors"
+                        placeholder={`Nombre del jugador ${idx + 1}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="p-8 border-t border-slate-100 bg-slate-50/50">

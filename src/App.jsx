@@ -5,7 +5,7 @@ import Bracket from './components/Bracket'
 import MatchSimulator from './components/MatchSimulator'
 import TournamentHistory from './components/TournamentHistory'
 import Login from './components/Login'
-import { Trophy, History, LogOut } from 'lucide-react'
+import { Trophy, History, LogOut, ChevronRight, Home } from 'lucide-react'
 import { db, auth } from './firebase'
 import { collection, onSnapshot, query, where, writeBatch, doc, addDoc, updateDoc, increment } from 'firebase/firestore'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
@@ -58,6 +58,10 @@ function App() {
     return saved ? JSON.parse(saved) : []
   })
 
+  const [realismEnabled, setRealismEnabled] = useState(() => {
+    return localStorage.getItem('fpc_realismEnabled') === 'true'
+  })
+
   // Persistencia de estados
   useEffect(() => {
     localStorage.setItem('fpc_phase', phase)
@@ -65,7 +69,8 @@ function App() {
     localStorage.setItem('fpc_bracketState', JSON.stringify(bracketState))
     localStorage.setItem('fpc_currentMatch', JSON.stringify(currentMatch))
     localStorage.setItem('fpc_tournamentTeams', JSON.stringify(tournamentTeams))
-  }, [phase, seededPositions, bracketState, currentMatch, tournamentTeams])
+    localStorage.setItem('fpc_realismEnabled', realismEnabled)
+  }, [phase, seededPositions, bracketState, currentMatch, tournamentTeams, realismEnabled])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -111,9 +116,10 @@ function App() {
     winner: null
   })
 
-  const handleStartDraw = (finalSeeded, selectedTeams) => {
+  const handleStartDraw = (finalSeeded, selectedTeams, realism) => {
     setSeededPositions(finalSeeded)
     setTournamentTeams(selectedTeams)
+    setRealismEnabled(realism)
     setPhase('draw')
   }
 
@@ -210,6 +216,9 @@ function App() {
       final: { team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null },
       champion: null
     })
+    setSeededPositions(Array(8).fill(null))
+    setTournamentTeams([])
+    setCurrentMatch(null)
     setPhase('setup')
   }
 
@@ -244,24 +253,69 @@ function App() {
               PLAYOFFS <span className="text-blue-600">VENDEHUMOS</span> <span className="text-red-600">FPC</span>
             </h1>
           </div>
-          <div className="flex gap-2 md:gap-6 text-[9px] md:text-[11px] font-black uppercase tracking-tighter italic text-slate-400 items-center overflow-x-auto no-scrollbar py-2">
-            <button onClick={() => setPhase('setup')} className={`whitespace-nowrap hover:text-blue-500 transition-colors ${phase === 'setup' ? 'text-blue-600' : ''}`}>1. Config</button>
-            <button onClick={() => { if(phase !== 'setup') setPhase('draw') }} className={`whitespace-nowrap hover:text-blue-500 transition-colors ${phase === 'draw' ? 'text-blue-600' : ''}`}>2. Sorteo</button>
-            <button onClick={() => { if(bracketState.qf[0].team1) setPhase('bracket') }} className={`whitespace-nowrap hover:text-blue-500 transition-colors ${phase === 'bracket' || phase === 'match' ? 'text-blue-600' : ''}`}>3. Torneo</button>
-            <div className="w-px h-4 bg-slate-200 mx-1 flex-shrink-0"></div>
-            <button onClick={() => setPhase('history')} className={`whitespace-nowrap flex items-center gap-1 hover:text-indigo-500 transition-colors ${phase === 'history' ? 'text-indigo-600' : ''}`}>
-              Historial
-            </button>
-            
-            <div className="flex items-center gap-2 ml-4 pl-4 border-l border-slate-200">
-               {user.photoURL ? (
-                 <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-full border border-slate-200" />
-               ) : (
-                 <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">{user.email?.[0].toUpperCase()}</div>
-               )}
-               <button onClick={handleLogout} className="text-slate-400 hover:text-red-500 transition-colors" title="Cerrar sesión">
-                 <LogOut className="w-4 h-4" />
-               </button>
+          <div className="flex items-center gap-4 flex-1 justify-end">
+            {/* Main Tournament Stepper */}
+            <nav className="hidden md:flex items-center bg-slate-100/50 p-1 rounded-xl border border-slate-200">
+              <button 
+                onClick={() => {
+                  setPhase('setup')
+                  setSeededPositions(Array(8).fill(null))
+                  setTournamentTeams([])
+                  setBracketState({
+                    qf: Array(4).fill({ team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null }),
+                    sf: Array(2).fill({ team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null }),
+                    final: { team1: null, team2: null, ida1: null, ida2: null, vuelta1: null, vuelta2: null, winner: null },
+                    champion: null
+                  })
+                }}
+                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all
+                  ${phase === 'setup' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              >
+                1. Configuración
+              </button>
+              <button 
+                onClick={() => { if(phase !== 'setup') setPhase('draw') }}
+                disabled={phase === 'setup'}
+                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all
+                  ${phase === 'draw' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}
+                  ${phase === 'setup' ? 'opacity-30 cursor-not-allowed' : ''}`}
+              >
+                2. Sorteo
+              </button>
+              <button 
+                onClick={() => { if(bracketState.qf[0].team1) setPhase('bracket') }}
+                disabled={!bracketState.qf[0].team1}
+                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all
+                  ${phase === 'bracket' || phase === 'match' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}
+                  ${!bracketState.qf[0].team1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+              >
+                3. Torneo
+              </button>
+            </nav>
+
+            <div className="w-px h-6 bg-slate-200 mx-2 hidden md:block"></div>
+
+            {/* Global Actions */}
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setPhase('history')}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all
+                  ${phase === 'history' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-600 border border-slate-200 hover:border-indigo-200 hover:text-indigo-600'}`}
+              >
+                <History className="w-4 h-4" />
+                <span className="hidden sm:inline">Historial</span>
+              </button>
+
+              <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
+                 {user.photoURL ? (
+                   <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
+                 ) : (
+                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold text-xs">{user.email?.[0].toUpperCase()}</div>
+                 )}
+                 <button onClick={handleLogout} className="p-2 bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all border border-slate-200" title="Cerrar sesión">
+                   <LogOut className="w-4 h-4" />
+                 </button>
+              </div>
             </div>
           </div>
         </div>
@@ -274,6 +328,7 @@ function App() {
             setTeams={setTeams}
             onStartDraw={handleStartDraw} 
             user={user}
+            initialRealism={realismEnabled}
           />
         )}
         
@@ -282,6 +337,7 @@ function App() {
             teams={tournamentTeams} 
             seededPositions={seededPositions} 
             onComplete={handleDrawComplete} 
+            onBack={() => setPhase('setup')}
           />
         )}
 
@@ -291,6 +347,7 @@ function App() {
               bracketState={bracketState} 
               onSimulateMatch={handleSimulateMatch} 
               onResetTournament={handleResetTournament}
+              onBack={() => setPhase('draw')}
             />
           </div>
         )}
@@ -299,12 +356,16 @@ function App() {
           <MatchSimulator 
             match={currentMatch} 
             onComplete={handleMatchComplete} 
+            onBack={() => setPhase('bracket')}
+            user={user}
+            realismEnabled={realismEnabled}
+            tournamentTeams={tournamentTeams}
           />
         )}
 
         {phase === 'history' && (
           <div className="flex flex-col gap-6 w-full max-w-[1400px]">
-            <TournamentHistory user={user} />
+            <TournamentHistory user={user} onBack={() => setPhase('setup')} />
           </div>
         )}
       </main>
@@ -318,7 +379,7 @@ function App() {
             </p>
           </div>
           <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] italic">
-            Desarrollado por <a href="https://portafolio-39270.web.app/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-red-600 transition-all border-b-2 border-transparent hover:border-red-600 pb-0.5">Jhon Vélez</a>
+            Desarrollado por <a href="https://portafolio-39270.web.app/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-red-600 transition-all border-b-2 border-transparent hover:border-red-600 pb-0.5">Jhonesvelez</a>
           </p>
         </div>
       </footer>

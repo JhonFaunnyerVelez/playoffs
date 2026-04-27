@@ -4,7 +4,7 @@ import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase
 import { Trophy, Calendar, Trash2, ArrowLeft } from 'lucide-react'
 import Bracket from './Bracket'
 
-export default function TournamentHistory({ user }) {
+export default function TournamentHistory({ user, onBack }) {
   const [tournaments, setTournaments] = useState([])
   const [selectedTournament, setSelectedTournament] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -65,7 +65,15 @@ export default function TournamentHistory({ user }) {
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center animate-fade-in p-4 w-full max-w-7xl mx-auto gap-10 pb-16">
+    <div className="flex-1 flex flex-col items-center animate-fade-in p-4 w-full max-w-7xl mx-auto gap-10 pb-16 relative">
+      <button 
+        onClick={onBack}
+        className="absolute left-0 top-0 p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Volver al Inicio
+      </button>
+
       {/* Header Section */}
       <div className="text-center relative">
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 w-32 h-32 bg-yellow-400/10 blur-[80px] rounded-full"></div>
@@ -85,7 +93,7 @@ export default function TournamentHistory({ user }) {
       ) : (
         <>
           {/* Hero Section: Last Champion & Podium */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full items-stretch">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 w-full items-start">
             
             {/* LAST CHAMPION HIGHLIGHT */}
             <div className="xl:col-span-4 flex flex-col gap-4">
@@ -94,7 +102,7 @@ export default function TournamentHistory({ user }) {
                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-tighter italic">Rey Actual</h3>
               </div>
               
-              <div className="bg-slate-900 rounded-[2.5rem] p-8 relative overflow-hidden flex flex-col items-center text-center shadow-xl shadow-slate-200 group h-full">
+              <div className="bg-slate-900 rounded-[2.5rem] p-8 relative overflow-hidden flex flex-col items-center text-center shadow-xl shadow-slate-200 group">
                 <div className="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none">
                    <div className="absolute top-[-10%] right-[-10%] w-48 h-48 bg-blue-600 blur-[100px] rounded-full"></div>
                    <div className="absolute bottom-[-10%] left-[-10%] w-48 h-48 bg-red-600 blur-[100px] rounded-full"></div>
@@ -146,49 +154,49 @@ export default function TournamentHistory({ user }) {
                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{championsStats.length} Clubes</span>
               </div>
 
-              <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-x-auto custom-scrollbar">
+              <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-x-auto overflow-y-auto max-h-[440px] custom-scrollbar">
                 <table className="min-w-[600px] w-full border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-left w-16">Pos</th>
-                      <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-left">Club</th>
-                      <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-center w-24">Títulos</th>
-                      <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Vitrina</th>
+                    <tr className="bg-slate-50 border-b border-slate-100 sticky top-0 z-20">
+                      <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-left w-16">Pos</th>
+                      <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-left">Club</th>
+                      <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-center w-24">Títulos</th>
+                      <th className="px-4 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 text-right">Vitrina</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {championsStats.map((team, i) => (
                       <tr key={team.id} className="group hover:bg-slate-50/50 transition-all">
-                        <td className="px-6 py-4">
-                          <span className={`text-lg font-black italic ${
+                        <td className="px-4 py-2.5">
+                          <span className={`text-base font-black italic ${
                             i === 0 ? 'text-yellow-500' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-orange-400' : 'text-slate-200'
                           }`}>
                             #{i + 1}
                           </span>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-4">
-                            <div className="w-11 h-11 bg-white rounded-xl shadow-sm border border-slate-100 flex items-center justify-center p-2 flex-shrink-0 group-hover:scale-105 transition-transform">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-white rounded-lg shadow-sm border border-slate-100 flex items-center justify-center p-1.5 flex-shrink-0 group-hover:scale-105 transition-transform">
                                {team.logoUrl ? (
                                  <img src={team.logoUrl} alt="" className="w-full h-full object-contain" />
                                ) : (
-                                 <Trophy className="w-5 h-5 text-slate-200" />
+                                 <Trophy className="w-4 h-4 text-slate-200" />
                                )}
                             </div>
-                            <span className="text-base font-black text-slate-800 uppercase tracking-tighter italic">{team.name}</span>
+                            <span className="text-sm font-black text-slate-800 uppercase tracking-tighter italic">{team.name}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-black text-base border-2 ${
+                        <td className="px-4 py-2.5 text-center">
+                          <div className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-black text-sm border-2 ${
                             i === 0 ? 'bg-yellow-50 border-yellow-200 text-yellow-600' : 'bg-slate-50 border-slate-200 text-slate-600'
                           }`}>
                             {team.count}
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end gap-1">
+                        <td className="px-4 py-2.5 text-right">
+                          <div className="flex justify-end gap-0.5">
                             {Array.from({ length: team.count }).map((_, j) => (
-                              <Trophy key={j} className={`w-3.5 h-3.5 ${j < 5 ? 'text-yellow-400' : 'text-yellow-200'} drop-shadow-sm`} />
+                              <Trophy key={j} className={`w-3 h-3 ${j < 5 ? 'text-yellow-400' : 'text-yellow-200'} drop-shadow-sm`} />
                             ))}
                           </div>
                         </td>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Dices, Play, Shield, ArrowRight, CheckCircle2, Trophy, ChevronRight } from 'lucide-react'
+import { Dices, Play, Shield, ArrowRight, CheckCircle2, Trophy, ChevronRight, ArrowLeft } from 'lucide-react'
 
-export default function DrawSimulator({ teams, seededPositions, onComplete }) {
+export default function DrawSimulator({ teams, seededPositions, onComplete, onBack }) {
   const [positions, setPositions] = useState([...seededPositions])
   const [unseededTeams, setUnseededTeams] = useState([])
   const [isDrawing, setIsDrawing] = useState(false)
@@ -12,6 +12,7 @@ export default function DrawSimulator({ teams, seededPositions, onComplete }) {
   const [nextDrawIndex, setNextDrawIndex] = useState(0)
 
   useEffect(() => {
+    setPositions([...seededPositions])
     const seededIds = seededPositions.filter(p => p !== null).map(p => p.id)
     setUnseededTeams(teams.filter(t => !seededIds.includes(t.id)))
     
@@ -72,6 +73,54 @@ export default function DrawSimulator({ teams, seededPositions, onComplete }) {
       // Small delay before finishing
     }
   }
+  
+  const drawAll = () => {
+    if (unseededTeams.length === 0 || isDrawing) return;
+    
+    let currentPositions = [...positions]
+    let remainingTeams = [...unseededTeams]
+    
+    // Pick empty spots from drawOrder in order
+    const emptySpots = []
+    let tempIndex = nextDrawIndex
+    while (tempIndex < drawOrder.length) {
+      const spotIndex = drawOrder[tempIndex]
+      if (currentPositions[spotIndex] === null) {
+        emptySpots.push(spotIndex)
+      }
+      tempIndex++
+    }
+
+    // Shuffle remaining teams
+    const shuffled = [...remainingTeams].sort(() => Math.random() - 0.5)
+    
+    // Fill the spots
+    shuffled.forEach((team, i) => {
+      if (i < emptySpots.length) {
+        currentPositions[emptySpots[i]] = team
+      }
+    })
+    
+    setPositions(currentPositions)
+    setUnseededTeams([])
+    setNextDrawIndex(drawOrder.length)
+    onComplete(currentPositions)
+  }
+
+  const resetDraw = () => {
+    setPositions([...seededPositions])
+    const seededIds = seededPositions.filter(p => p !== null).map(p => p.id)
+    setUnseededTeams(teams.filter(t => !seededIds.includes(t.id)))
+    
+    // Find first empty spot in drawOrder
+    let firstEmpty = 0
+    while (firstEmpty < drawOrder.length && seededPositions[drawOrder[firstEmpty]] !== null) {
+      firstEmpty++
+    }
+    setNextDrawIndex(firstEmpty)
+    setCurrentDraw(null)
+    setIsDrawing(false)
+  }
 
   const renderSlot = (index, alignRight = false) => {
     const team = positions[index]
@@ -112,7 +161,15 @@ export default function DrawSimulator({ teams, seededPositions, onComplete }) {
   }
 
   return (
-    <div className="flex flex-col gap-6 h-full animate-fade-in pt-2 pb-8">
+    <div className="flex flex-col gap-6 h-full animate-fade-in pt-2 pb-8 relative">
+      <button 
+        onClick={onBack}
+        className="absolute left-0 top-0 p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-2xl transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Volver
+      </button>
+
       <div className="text-center space-y-2">
         <div className="inline-flex items-center gap-2 bg-blue-50 px-4 py-1 rounded-full border border-blue-100 mb-1">
           <Dices className="w-4 h-4 text-blue-600" />
@@ -249,29 +306,54 @@ export default function DrawSimulator({ teams, seededPositions, onComplete }) {
           </div>
 
           {unseededTeams.length > 0 ? (
-            <button
-              onClick={drawNext}
-              disabled={isDrawing}
-              className={`group relative py-4 px-12 font-black text-base rounded-2xl transition-all flex items-center gap-3 shadow-lg w-full max-w-xs justify-center overflow-hidden
-                ${isDrawing 
-                  ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-yellow-400 via-blue-600 to-red-600 text-white hover:shadow-blue-500/30 hover:-translate-y-1'
-                }`}
-            >
-              {!isDrawing && <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>}
-              <span className="relative flex items-center gap-2 uppercase tracking-widest text-sm drop-shadow-sm">
-                {isDrawing ? 'Mezclando...' : 'Sortear'}
-                {!isDrawing && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />}
-              </span>
-            </button>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+              <button
+                onClick={drawNext}
+                disabled={isDrawing}
+                className={`group relative py-4 px-6 font-black text-base rounded-2xl transition-all flex items-center gap-3 shadow-lg w-full justify-center overflow-hidden
+                  ${isDrawing 
+                    ? 'bg-slate-100 text-slate-300 cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-yellow-400 via-blue-600 to-red-600 text-white hover:shadow-blue-500/30 hover:-translate-y-1'
+                  }`}
+              >
+                {!isDrawing && <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>}
+                <span className="relative flex items-center gap-2 uppercase tracking-widest text-xs drop-shadow-sm">
+                  {isDrawing ? 'Mezclando...' : 'Sorteo uno por uno'}
+                  {!isDrawing && <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />}
+                </span>
+              </button>
+
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  onClick={drawAll}
+                  disabled={isDrawing}
+                  className={`py-3 px-6 font-black text-[10px] rounded-xl transition-all border-2 uppercase tracking-[0.2em] w-full
+                    ${isDrawing 
+                      ? 'border-slate-100 text-slate-200 cursor-not-allowed' 
+                      : 'border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white shadow-md shadow-blue-100'
+                    }`}
+                >
+                  Sortear todos
+                </button>
+              </div>
+            </div>
           ) : (
-            <button
-              onClick={() => onComplete(positions)}
-              className="py-4 px-12 bg-gradient-to-r from-green-600 to-emerald-500 text-white font-black text-base rounded-2xl transition-all transform hover:-translate-y-1 shadow-lg shadow-green-500/20 flex items-center gap-2 uppercase tracking-widest"
-            >
-              Continuar
-              <ChevronRight className="w-5 h-5" />
-            </button>
+            <div className="flex flex-col gap-4 w-full max-w-xs">
+              <button
+                onClick={() => onComplete(positions)}
+                className="py-4 px-12 bg-gradient-to-r from-green-600 to-emerald-500 text-white font-black text-base rounded-2xl transition-all transform hover:-translate-y-1 shadow-lg shadow-green-500/20 flex items-center gap-2 uppercase tracking-widest justify-center"
+              >
+                Continuar
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              
+              <button
+                onClick={resetDraw}
+                className="py-3 px-12 bg-white border-2 border-blue-600 text-blue-600 font-black text-[10px] rounded-2xl transition-all hover:bg-blue-600 hover:text-white uppercase tracking-widest shadow-sm"
+              >
+                Sortear nuevamente
+              </button>
+            </div>
           )}
         </div>
 
