@@ -46,7 +46,7 @@ export default function TeamSetup({ teams, onStartDraw, user, initialRealism }) 
   const [shortDraft, setShortDraft] = useState('')
   const [uploading, setUploading] = useState(null)
   const [setupMode, setSetupMode] = useState('selection') // 'selection' | 'seeding'
-  const [realismEnabled, setRealismEnabled] = useState(initialRealism || false)
+  const [realismEnabled, setRealismEnabled] = useState(initialRealism ?? true)
   const hasSeeds = seeded.some(s => s !== null)
 
   const handleImageUpload = async (teamId, e) => {

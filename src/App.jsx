@@ -59,7 +59,8 @@ function App() {
   })
 
   const [realismEnabled, setRealismEnabled] = useState(() => {
-    return localStorage.getItem('fpc_realismEnabled') === 'true'
+    const saved = localStorage.getItem('fpc_realism_v2')
+    return saved === null ? true : saved === 'true'
   })
 
   // Persistencia de estados
@@ -69,7 +70,7 @@ function App() {
     localStorage.setItem('fpc_bracketState', JSON.stringify(bracketState))
     localStorage.setItem('fpc_currentMatch', JSON.stringify(currentMatch))
     localStorage.setItem('fpc_tournamentTeams', JSON.stringify(tournamentTeams))
-    localStorage.setItem('fpc_realismEnabled', realismEnabled)
+    localStorage.setItem('fpc_realism_v2', realismEnabled)
   }, [phase, seededPositions, bracketState, currentMatch, tournamentTeams, realismEnabled])
 
   useEffect(() => {
