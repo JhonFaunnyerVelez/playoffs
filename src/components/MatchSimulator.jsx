@@ -71,10 +71,10 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
   })
 
   // REALISM BONUS LOGIC
-  const t1Index = realismEnabled ? tournamentTeams.findIndex(t => t.id === team1.id) : -1
-  const t2Index = realismEnabled ? tournamentTeams.findIndex(t => t.id === team2.id) : -1
-  const t1Bonus = t1Index !== -1 ? (8 - t1Index) * 0.01 : 0 
-  const t2Bonus = t2Index !== -1 ? (8 - t2Index) * 0.01 : 0
+  const t1Index = tournamentTeams ? tournamentTeams.findIndex(t => t.id === team1.id) : -1
+  const t2Index = tournamentTeams ? tournamentTeams.findIndex(t => t.id === team2.id) : -1
+  const t1Bonus = realismEnabled && t1Index !== -1 ? (8 - t1Index) * 0.01 : 0 
+  const t2Bonus = realismEnabled && t2Index !== -1 ? (8 - t2Index) * 0.01 : 0
 
   // UNDERDOG BOOST LOGIC (+1% per advanced phase for positions 5-8)
   const getUnderdogBonus = (idx) => {
@@ -84,8 +84,8 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
     return 0
   }
 
-  const t1UnderdogBonus = realismEnabled ? getUnderdogBonus(t1Index) : 0
-  const t2UnderdogBonus = realismEnabled ? getUnderdogBonus(t2Index) : 0
+  const t1UnderdogBonus = getUnderdogBonus(t1Index)
+  const t2UnderdogBonus = getUnderdogBonus(t2Index)
 
   // Localía Logic as requested:
   // El primero de la llave (Team 1) comienza de local (IDA).
@@ -93,8 +93,8 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
   const currentLeg = (leg || '').toLowerCase().trim()
   const isT1Local = currentLeg === 'ida' || currentLeg === 'final'
   
-  const t1LocaliaBonus = realismEnabled && isT1Local ? 0.01 : 0
-  const t2LocaliaBonus = realismEnabled && !isT1Local ? 0.01 : 0
+  const t1LocaliaBonus = isT1Local ? 0.01 : 0
+  const t2LocaliaBonus = !isT1Local ? 0.01 : 0
 
   const t1TotalBonus = t1Bonus + t1UnderdogBonus + t1LocaliaBonus
   const t2TotalBonus = t2Bonus + t2UnderdogBonus + t2LocaliaBonus
@@ -297,7 +297,7 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
       const { team, player } = activeVar
       setActiveVar(null)
       
-      const isConfirmed = Math.random() < 0.5
+      const isConfirmed = Math.random() < 0.35 // 35% confirmado, 65% anulado
       
       if (isConfirmed) {
         setGiantVar({ type: 'confirmed', team, player })
@@ -469,10 +469,9 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
     team1Prob = Math.max(0.05, Math.min(0.95, team1Prob)) 
 
     // Apply Realism Bonus
-    if (realismEnabled) {
-      team1Prob += (t1TotalBonus - t2TotalBonus)
-      team1Prob = Math.max(0.1, Math.min(0.9, team1Prob))
-    }
+    // Aplicar Bonos de Realismo/Localía/Impulso
+    team1Prob += (t1TotalBonus - t2TotalBonus)
+    team1Prob = Math.max(0.1, Math.min(0.9, team1Prob))
 
     let isTeam1 = Math.random() < team1Prob
     if (overrideScoringTeam) {
@@ -495,7 +494,7 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
     
     if (eventTypeRand < 0.22) {
       const player = getRandomPlayer(team, 'gk', true)
-      const isVarCheck = Math.random() < 0.25 // 25% VAR chance now
+      const isVarCheck = Math.random() < 0.20 // 20% VAR chance
       
       // Siempre mostramos el grito de GOL primero para saber qué se celebra
       setGiantGoal({ team, player })
@@ -805,45 +804,45 @@ export default function MatchSimulator({ match, onComplete, onBack, user, realis
         </div>
         <div className="text-center mt-4">
           <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">{team.name}</h2>
-          {realismEnabled && (
-            <div className="flex flex-col items-center mt-2 gap-1">
-              <div className="flex flex-wrap justify-center gap-1">
+          <div className="flex flex-col items-center mt-2 gap-1">
+            <div className="flex flex-wrap justify-center gap-1">
+              {realismEnabled && teamBonus > 0 && (
                 <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 uppercase">
                   Fuerza: +{Math.round(teamBonus * 100)}%
                 </span>
-                {teamUnderdogBonus > 0 && (
-                  <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase">
-                    Impulso: +{Math.round(teamUnderdogBonus * 100)}%
-                  </span>
-                )}
-                {teamLocaliaBonus > 0 && (
-                  <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase">
-                    Localía: +1%
-                  </span>
-                )}
-                {myReds > 0 && (
-                  <span className="text-[8px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase animate-pulse">
-                    Expulsión: -{myReds * 20}%
-                  </span>
-                )}
-                {opponentReds > 0 && (
-                  <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase animate-pulse">
-                    Superioridad: +{opponentReds * 20}%
-                  </span>
-                )}
-                {hasEmpuje && (
-                  <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase animate-pulse">
-                    {empujeLabel}: +35%
-                  </span>
-                )}
-                {isUnderPressure && (
-                  <span className="text-[8px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase animate-pulse">
-                    Bajo Presión: -35%
-                  </span>
-                )}
-              </div>
+              )}
+              {teamUnderdogBonus > 0 && (
+                <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase">
+                  Impulso: +{Math.round(teamUnderdogBonus * 100)}%
+                </span>
+              )}
+              {teamLocaliaBonus > 0 && (
+                <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase">
+                  Localía: +1%
+                </span>
+              )}
+              {myReds > 0 && (
+                <span className="text-[8px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase animate-pulse">
+                  Expulsión: -{myReds * 20}%
+                </span>
+              )}
+              {opponentReds > 0 && (
+                <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase animate-pulse">
+                  Superioridad: +{opponentReds * 20}%
+                </span>
+              )}
+              {hasEmpuje && (
+                <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 uppercase animate-pulse">
+                  {empujeLabel}: +35%
+                </span>
+              )}
+              {isUnderPressure && (
+                <span className="text-[8px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100 uppercase animate-pulse">
+                  Bajo Presión: -35%
+                </span>
+              )}
             </div>
-          )}
+          </div>
         </div>
         {(matchPhase === 'penalties' || (matchPhase === 'finished' && (penHistory1.length > 0 || penHistory2.length > 0))) && 
           renderPenaltyCircles(penHistory, matchPhase === 'penalties' && isTurn && !checkShootoutWinner())
